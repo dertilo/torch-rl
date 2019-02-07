@@ -7,11 +7,12 @@ import datetime
 import torch
 import torch_rl
 import sys
+from torch_rl.algos import A2CAlgo, PPOAlgo
 
 try:
     import gym_minigrid
 except ImportError:
-    pass
+    raise Exception('gym_minigrid must be in PYTHONPATH!')
 
 import utils
 from model import ACModel
@@ -19,9 +20,9 @@ from model import ACModel
 # Parse arguments
 
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-parser.add_argument("--algo", required=True,
+parser.add_argument("--algo", default='ppo',
                     help="algorithm to use: a2c | ppo (REQUIRED)")
-parser.add_argument("--env", required=True,
+parser.add_argument("--env", default='MiniGrid-Empty-8x8-v0',
                     help="name of the environment to train on (REQUIRED)")
 parser.add_argument("--model", default=None,
                     help="name of the model (default: {ENV}_{ALGO}_{TIME})")
@@ -128,11 +129,11 @@ logger.info("CUDA available: {}\n".format(torch.cuda.is_available()))
 # Define actor-critic algo
 
 if args.algo == "a2c":
-    algo = torch_rl.A2CAlgo(envs, acmodel, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
+    algo = A2CAlgo(envs, acmodel, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
                             args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
                             args.optim_alpha, args.optim_eps, preprocess_obss)
 elif args.algo == "ppo":
-    algo = torch_rl.PPOAlgo(envs, acmodel, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
+    algo = PPOAlgo(envs, acmodel, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
                             args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
                             args.optim_eps, args.clip_eps, args.epochs, args.batch_size, preprocess_obss)
 else:

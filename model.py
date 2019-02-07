@@ -2,10 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
-import torch_rl
 import gym
 
 # Function from https://github.com/ikostrikov/pytorch-a2c-ppo-acktr/blob/master/model.py
+from torch_rl.model import RecurrentACModel
+
+
 def initialize_parameters(m):
     classname = m.__class__.__name__
     if classname.find('Linear') != -1:
@@ -14,7 +16,7 @@ def initialize_parameters(m):
         if m.bias is not None:
             m.bias.data.fill_(0)
 
-class ACModel(nn.Module, torch_rl.RecurrentACModel):
+class ACModel(nn.Module, RecurrentACModel):
     def __init__(self, obs_space, action_space, use_memory=False, use_text=False):
         super().__init__()
 
