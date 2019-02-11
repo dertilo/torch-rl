@@ -164,13 +164,12 @@ while num_frames < args.frames:
         fps = logs["num_frames"]/(update_end_time - update_start_time)
         duration = int(time.time() - total_start_time)
         return_per_episode = utils.synthesize(logs["return_per_episode"])
-        rreturn_per_episode = utils.synthesize(logs["reshaped_return_per_episode"])
         num_frames_per_episode = utils.synthesize(logs["num_frames_per_episode"])
 
         header = ["update", "frames", "FPS", "duration"]
         data = [update, num_frames, fps, duration]
-        header += ["rreturn_" + key for key in rreturn_per_episode.keys()]
-        data += rreturn_per_episode.values()
+        header += ["rreturn_" + key for key in return_per_episode.keys()]
+        data += return_per_episode.values()
         header += ["num_frames_" + key for key in num_frames_per_episode.keys()]
         data += num_frames_per_episode.values()
         header += ["entropy", "value", "policy_loss", "value_loss", "grad_norm"]

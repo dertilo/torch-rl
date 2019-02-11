@@ -89,7 +89,6 @@ class BaseAlgo(ABC):
         self.masks = torch.zeros(*shape, device=self.device)
         self.actions = torch.zeros(*shape, device=self.device, dtype=torch.int)
         self.values = torch.zeros(*shape, device=self.device)
-        self.rewards = torch.zeros(*shape, device=self.device)
         self.advantages = torch.zeros(*shape, device=self.device)
         self.log_probs = torch.zeros(*shape, device=self.device)
 
@@ -124,7 +123,9 @@ class BaseAlgo(ABC):
             Useful stats about the training process, including the average
             reward, policy loss, value loss, etc.
         """
-        dones = torch.zeros(*(self.num_rollout_steps, self.num_envs), device=self.device)
+        exp = {key:torch.zeros(*(self.num_rollout_steps, self.num_envs), device=self.device)
+               for key in ['rewards','dones']}
+
         for i in range(self.num_rollout_steps):
             # Do one agent-environment interaction
 
@@ -137,7 +138,7 @@ class BaseAlgo(ABC):
             action = dist.sample()
 
             obs, reward, done, _ = self.env.step(action.cpu().numpy())
-            dones[i] = torch.tensor(done, device=self.device, dtype=torch.float)
+            exp['dones'][i] = torch.tensor(done, device=self.device, dtype=torch.float)
             # Update experiences values
 
             self.obss[i] = self.last_observation
@@ -149,31 +150,12 @@ class BaseAlgo(ABC):
             self.mask = 1 - torch.tensor(done, device=self.device, dtype=torch.float)
             self.actions[i] = action
             self.values[i] = value
-            if self.reshape_reward is not None:
-                self.rewards[i] = torch.tensor([
-                    self.reshape_reward(obs_, action_, reward_, done_)
-                    for obs_, action_, reward_, done_ in zip(obs, action, reward, done)
-                ], device=self.device)
-            else:
-                self.rewards[i] = torch.tensor(reward, device=self.device)
+            exp['rewards'][i] = torch.tensor(reward, device=self.device)
             self.log_probs[i] = dist.log_prob(action)
 
             # Update log values
 
-            self.log_episode_return += torch.tensor(reward, device=self.device, dtype=torch.float)
-            self.log_episode_reshaped_return += self.rewards[i]
-            self.log_episode_num_frames += torch.ones(self.num_envs, device=self.device)
-
-            for i, done_ in enumerate(done):
-                if done_:
-                    self.log_done_counter += 1
-                    self.log_return.append(self.log_episode_return[i].item())
-                    self.log_reshaped_return.append(self.log_episode_reshaped_return[i].item())
-                    self.log_num_frames.append(self.log_episode_num_frames[i].item())
-
-            self.log_episode_return *= self.mask
-            self.log_episode_reshaped_return *= self.mask
-            self.log_episode_num_frames *= self.mask
+            self.logging_stuff(done, reward)
 
         # Add advantage and return to experiences
 
@@ -185,7 +167,7 @@ class BaseAlgo(ABC):
                 _, next_value = self.acmodel(preprocessed_obs)
 
         values = torch.cat([self.values, next_value.unsqueeze(0)], dim=0)
-        self.advantages = self.generalized_advantage_estimation(self.rewards, values, dones)
+        self.advantages = self.generalized_advantage_estimation(exp['rewards'], values, exp['dones'])
 
         exps = DictList()
         exps.obs = [self.obss[i][j]
@@ -199,7 +181,7 @@ class BaseAlgo(ABC):
         # for all tensors below, T x P -> P x T -> P * T
         exps.action = self.actions.transpose(0, 1).reshape(-1)
         exps.value = self.values.transpose(0, 1).reshape(-1)
-        exps.reward = self.rewards.transpose(0, 1).reshape(-1)
+        exps.reward = exp['rewards'].transpose(0, 1).reshape(-1)
         exps.advantage = self.advantages.transpose(0, 1).reshape(-1)
         exps.returnn = exps.value + exps.advantage
         exps.log_prob = self.log_probs.transpose(0, 1).reshape(-1)
@@ -225,6 +207,17 @@ class BaseAlgo(ABC):
         self.log_num_frames = self.log_num_frames[-self.num_envs:]
 
         return exps, log
+
+    def logging_stuff(self, done, reward):
+        self.log_episode_return += torch.tensor(reward, device=self.device, dtype=torch.float)
+        self.log_episode_num_frames += torch.ones(self.num_envs, device=self.device)
+        for i, done_ in enumerate(done):
+            if done_:
+                self.log_done_counter += 1
+                self.log_return.append(self.log_episode_return[i].item())
+                self.log_num_frames.append(self.log_episode_num_frames[i].item())
+        self.log_episode_return *= self.mask
+        self.log_episode_num_frames *= self.mask
 
     def generalized_advantage_estimation(self,rewards,values,dones):
         assert values.shape[0]==1+self.num_rollout_steps
