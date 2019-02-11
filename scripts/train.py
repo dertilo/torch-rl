@@ -8,6 +8,7 @@ import torch
 import torch_rl
 import sys
 from torch_rl.algos import A2CAlgo, PPOAlgo
+from torch_rl.utils import ParallelEnv
 
 try:
     import gym_minigrid
@@ -94,16 +95,18 @@ logger.info("{}\n".format(args))
 utils.seed(args.seed)
 
 # Generate environments
+def build_env_supplier(i):
+    def env_supplier():
+        env = gym.make(args.env)
+        env.seed(args.seed + 10000 * i)
+        return env
+    return env_supplier
 
-envs = []
-for i in range(args.procs):
-    env = gym.make(args.env)
-    env.seed(args.seed + 10000*i)
-    envs.append(env)
+envs = ParallelEnv([build_env_supplier(i) for i in range(args.procs)])
 
 # Define obss preprocessor
 
-obs_space, preprocess_obss = utils.get_obss_preprocessor(args.env, envs[0].observation_space, model_dir)
+obs_space, preprocess_obss = utils.get_obss_preprocessor(args.env, envs.observation_space, model_dir)
 
 # Load training status
 
@@ -118,7 +121,7 @@ try:
     acmodel = utils.load_model(model_dir)
     logger.info("Model successfully loaded\n")
 except OSError:
-    acmodel = ACModel(obs_space, envs[0].action_space, args.mem, args.text)
+    acmodel = ACModel(obs_space, envs.action_space, args.mem, args.text)
     logger.info("Model successfully created\n")
 logger.info("{}\n".format(acmodel))
 

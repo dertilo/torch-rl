@@ -1,4 +1,7 @@
 from abc import ABC, abstractmethod
+from collections import namedtuple
+
+import gym
 import torch
 import numpy
 
@@ -8,7 +11,7 @@ from torch_rl.utils import DictList, ParallelEnv
 class BaseAlgo(ABC):
     """The base class for RL algorithms."""
 
-    def __init__(self, envs, acmodel, num_frames_per_proc, discount, lr, gae_lambda, entropy_coef,
+    def __init__(self, env:gym.Env, acmodel, num_rollout_steps, discount, lr, gae_lambda, entropy_coef,
                  value_loss_coef, max_grad_norm, recurrence, preprocess_obss, reshape_reward):
         """
         Initializes a `BaseAlgo` instance.
@@ -46,10 +49,10 @@ class BaseAlgo(ABC):
 
         # Store parameters
 
-        self.env = ParallelEnv(envs)
+        self.env = env
         self.acmodel = acmodel
         self.acmodel.train()
-        self.num_frames_per_proc = num_frames_per_proc
+        self.num_rollout_steps = num_rollout_steps
         self.discount = discount
         self.lr = lr
         self.gae_lambda = gae_lambda
@@ -63,19 +66,20 @@ class BaseAlgo(ABC):
         # Store helpers values
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.num_procs = len(envs)
-        self.num_frames = self.num_frames_per_proc * self.num_procs
+        self.obs = self.env.reset()
+        self.num_envs = len(self.obs)
+        self.num_frames = self.num_rollout_steps * self.num_envs
 
         # Control parameters
 
         assert self.acmodel.recurrent or self.recurrence == 1
-        assert self.num_frames_per_proc % self.recurrence == 0
+        assert self.num_rollout_steps % self.recurrence == 0
 
         # Initialize experience values
 
-        shape = (self.num_frames_per_proc, self.num_procs)
+        shape = (self.num_rollout_steps, self.num_envs)
 
-        self.obs = self.env.reset()
+
         self.obss = [None]*(shape[0])
         if self.acmodel.recurrent:
             self.memory = torch.zeros(shape[1], self.acmodel.memory_size, device=self.device)
@@ -90,14 +94,14 @@ class BaseAlgo(ABC):
 
         # Initialize log values
 
-        self.log_episode_return = torch.zeros(self.num_procs, device=self.device)
-        self.log_episode_reshaped_return = torch.zeros(self.num_procs, device=self.device)
-        self.log_episode_num_frames = torch.zeros(self.num_procs, device=self.device)
+        self.log_episode_return = torch.zeros(self.num_envs, device=self.device)
+        self.log_episode_reshaped_return = torch.zeros(self.num_envs, device=self.device)
+        self.log_episode_num_frames = torch.zeros(self.num_envs, device=self.device)
 
         self.log_done_counter = 0
-        self.log_return = [0] * self.num_procs
-        self.log_reshaped_return = [0] * self.num_procs
-        self.log_num_frames = [0] * self.num_procs
+        self.log_return = [0] * self.num_envs
+        self.log_reshaped_return = [0] * self.num_envs
+        self.log_num_frames = [0] * self.num_envs
 
     def collect_experiences(self):
         """Collects rollouts and computes advantages.
@@ -111,8 +115,8 @@ class BaseAlgo(ABC):
         exps : DictList
             Contains actions, rewards, advantages etc as attributes.
             Each attribute, e.g. `exps.reward` has a shape
-            (self.num_frames_per_proc * num_envs, ...). k-th block
-            of consecutive `self.num_frames_per_proc` frames contains
+            (self.num_rollout_steps * num_envs, ...). k-th block
+            of consecutive `self.num_rollout_steps` frames contains
             data obtained from the k-th environment. Be careful not to mix
             data from different environments!
         logs : dict
@@ -120,7 +124,7 @@ class BaseAlgo(ABC):
             reward, policy loss, value loss, etc.
         """
 
-        for i in range(self.num_frames_per_proc):
+        for i in range(self.num_rollout_steps):
             # Do one agent-environment interaction
 
             preprocessed_obs = self.preprocess_obss(self.obs, device=self.device)
@@ -157,7 +161,7 @@ class BaseAlgo(ABC):
 
             self.log_episode_return += torch.tensor(reward, device=self.device, dtype=torch.float)
             self.log_episode_reshaped_return += self.rewards[i]
-            self.log_episode_num_frames += torch.ones(self.num_procs, device=self.device)
+            self.log_episode_num_frames += torch.ones(self.num_envs, device=self.device)
 
             for i, done_ in enumerate(done):
                 if done_:
@@ -179,10 +183,10 @@ class BaseAlgo(ABC):
             else:
                 _, next_value = self.acmodel(preprocessed_obs)
 
-        for i in reversed(range(self.num_frames_per_proc)):
-            next_mask = self.masks[i+1] if i < self.num_frames_per_proc - 1 else self.mask
-            next_value = self.values[i+1] if i < self.num_frames_per_proc - 1 else next_value
-            next_advantage = self.advantages[i+1] if i < self.num_frames_per_proc - 1 else 0
+        for i in reversed(range(self.num_rollout_steps)):
+            next_mask = self.masks[i+1] if i < self.num_rollout_steps - 1 else self.mask
+            next_value = self.values[i+1] if i < self.num_rollout_steps - 1 else next_value
+            next_advantage = self.advantages[i+1] if i < self.num_rollout_steps - 1 else 0
 
             delta = self.rewards[i] + self.discount * next_value * next_mask - self.values[i]
             self.advantages[i] = delta + self.discount * self.gae_lambda * next_advantage * next_mask
@@ -191,14 +195,14 @@ class BaseAlgo(ABC):
         #   the whole experience is the concatenation of the experience
         #   of each process.
         # In comments below:
-        #   - T is self.num_frames_per_proc,
+        #   - T is self.num_rollout_steps,
         #   - P is self.num_procs,
         #   - D is the dimensionality.
 
         exps = DictList()
         exps.obs = [self.obss[i][j]
-                    for j in range(self.num_procs)
-                    for i in range(self.num_frames_per_proc)]
+                    for j in range(self.num_envs)
+                    for i in range(self.num_rollout_steps)]
         if self.acmodel.recurrent:
             # T x P x D -> P x T x D -> (P * T) x D
             exps.memory = self.memories.transpose(0, 1).reshape(-1, *self.memories.shape[2:])
@@ -218,7 +222,7 @@ class BaseAlgo(ABC):
 
         # Log some values
 
-        keep = max(self.log_done_counter, self.num_procs)
+        keep = max(self.log_done_counter, self.num_envs)
 
         log = {
             "return_per_episode": self.log_return[-keep:],
@@ -228,9 +232,9 @@ class BaseAlgo(ABC):
         }
 
         self.log_done_counter = 0
-        self.log_return = self.log_return[-self.num_procs:]
-        self.log_reshaped_return = self.log_reshaped_return[-self.num_procs:]
-        self.log_num_frames = self.log_num_frames[-self.num_procs:]
+        self.log_return = self.log_return[-self.num_envs:]
+        self.log_reshaped_return = self.log_reshaped_return[-self.num_envs:]
+        self.log_num_frames = self.log_num_frames[-self.num_envs:]
 
         return exps, log
 
