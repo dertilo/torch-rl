@@ -87,10 +87,7 @@ class BaseAlgo(ABC):
             self.memories = torch.zeros(*shape, self.acmodel.memory_size, device=self.device)
         self.mask = torch.ones(shape[1], device=self.device)
         self.masks = torch.zeros(*shape, device=self.device)
-        self.actions = torch.zeros(*shape, device=self.device, dtype=torch.int)
-        self.values = torch.zeros(*shape, device=self.device)
         self.advantages = torch.zeros(*shape, device=self.device)
-        self.log_probs = torch.zeros(*shape, device=self.device)
 
         # Initialize log values
 
@@ -124,40 +121,35 @@ class BaseAlgo(ABC):
             reward, policy loss, value loss, etc.
         """
         exp = {key:torch.zeros(*(self.num_rollout_steps, self.num_envs), device=self.device)
-               for key in ['rewards','dones']}
+               for key in ['actions','values','logprobs','rewards','dones']}
+        exp['observations'] = [None for _ in range(self.num_rollout_steps)]
+        last_observation = self.last_observation
 
         for i in range(self.num_rollout_steps):
-            # Do one agent-environment interaction
-
-            preprocessed_obs = self.preprocess_obss(self.last_observation, device=self.device)
+            preprocessed_obs = self.preprocess_obss(last_observation, device=self.device)
             with torch.no_grad():
                 if self.acmodel.recurrent:
-                    dist, value, memory = self.acmodel(preprocessed_obs, self.memory * self.mask.unsqueeze(1))
+                    dist, values, memory = self.acmodel(preprocessed_obs, self.memory * self.mask.unsqueeze(1))
                 else:
-                    dist, value = self.acmodel(preprocessed_obs)
+                    dist, values = self.acmodel(preprocessed_obs)
             action = dist.sample()
-
+            logprob = dist.log_prob(action)
             obs, reward, done, _ = self.env.step(action.cpu().numpy())
-            exp['dones'][i] = torch.tensor(done, device=self.device, dtype=torch.float)
-            # Update experiences values
-
-            self.obss[i] = self.last_observation
-            self.last_observation = obs
+            reward = torch.tensor(reward, device=self.device)
+            done = torch.tensor(done, device=self.device, dtype=torch.float)
+            for key,vals in zip(exp.keys(),[action,values,logprob,reward,done]):
+                exp[key][i]=vals
+            exp['observations'][i]=last_observation
+            last_observation = obs
             if self.acmodel.recurrent:
                 self.memories[i] = self.memory
                 self.memory = memory
             self.masks[i] = self.mask
             self.mask = 1 - torch.tensor(done, device=self.device, dtype=torch.float)
-            self.actions[i] = action
-            self.values[i] = value
-            exp['rewards'][i] = torch.tensor(reward, device=self.device)
-            self.log_probs[i] = dist.log_prob(action)
-
-            # Update log values
 
             self.logging_stuff(done, reward)
 
-        # Add advantage and return to experiences
+        self.last_observation = last_observation
 
         preprocessed_obs = self.preprocess_obss(self.last_observation, device=self.device)
         with torch.no_grad():
@@ -166,11 +158,13 @@ class BaseAlgo(ABC):
             else:
                 _, next_value = self.acmodel(preprocessed_obs)
 
-        values = torch.cat([self.values, next_value.unsqueeze(0)], dim=0)
-        self.advantages = self.generalized_advantage_estimation(exp['rewards'], values, exp['dones'])
+        self.advantages = self.generalized_advantage_estimation(
+            rewards=exp['rewards'],
+            values=torch.cat([exp['values'], next_value.unsqueeze(0)], dim=0),
+            dones=exp['dones'])
 
         exps = DictList()
-        exps.obs = [self.obss[i][j]
+        exps.obs = [exp['observations'][i][j]
                     for j in range(self.num_envs)
                     for i in range(self.num_rollout_steps)]
         if self.acmodel.recurrent:
@@ -179,12 +173,12 @@ class BaseAlgo(ABC):
             # T x P -> P x T -> (P * T) x 1
             exps.mask = self.masks.transpose(0, 1).reshape(-1).unsqueeze(1)
         # for all tensors below, T x P -> P x T -> P * T
-        exps.action = self.actions.transpose(0, 1).reshape(-1)
-        exps.value = self.values.transpose(0, 1).reshape(-1)
+        exps.action = exp['actions'].transpose(0, 1).reshape(-1)
+        exps.value = exp['values'].transpose(0, 1).reshape(-1)
         exps.reward = exp['rewards'].transpose(0, 1).reshape(-1)
         exps.advantage = self.advantages.transpose(0, 1).reshape(-1)
         exps.returnn = exps.value + exps.advantage
-        exps.log_prob = self.log_probs.transpose(0, 1).reshape(-1)
+        exps.log_prob = exp['logprobs'].transpose(0, 1).reshape(-1)
 
         # Preprocess experiences
 
