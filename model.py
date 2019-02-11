@@ -25,18 +25,26 @@ class ACModel(nn.Module, RecurrentACModel):
         self.use_memory = use_memory
 
         # Define image embedding
+        # self.image_conv = nn.Sequential(
+        #     nn.Conv2d(3, 16, (2, 2)),
+        #     nn.ReLU(),
+        #     nn.MaxPool2d((2, 2)),
+        #     nn.Conv2d(16, 32, (2, 2)),
+        #     nn.ReLU(),
+        #     nn.Conv2d(32, 64, (2, 2)),
+        #     nn.ReLU()
+        # )
         self.image_conv = nn.Sequential(
-            nn.Conv2d(3, 16, (2, 2)),
-            nn.ReLU(),
-            nn.MaxPool2d((2, 2)),
-            nn.Conv2d(16, 32, (2, 2)),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, (2, 2)),
-            nn.ReLU()
+            *[
+                nn.Linear(obs_space['image'][0]*obs_space['image'][1], 128),
+                nn.ReLU(),
+                nn.Linear(128, 64),
+                nn.ReLU(),
+             ]
         )
         n = obs_space["image"][0]
         m = obs_space["image"][1]
-        self.image_embedding_size = ((n-1)//2-2)*((m-1)//2-2)*64
+        self.image_embedding_size = 64#((n-1)//2-2)*((m-1)//2-2)*64
 
         # Define memory
         if self.use_memory:
@@ -57,8 +65,8 @@ class ACModel(nn.Module, RecurrentACModel):
         # Define actor's model
         if isinstance(action_space, gym.spaces.Discrete):
             self.actor = nn.Sequential(
-                nn.Linear(self.embedding_size, 64),
-                nn.Tanh(),
+                # nn.Linear(self.embedding_size, 64),
+                # nn.Tanh(),
                 nn.Linear(64, action_space.n)
             )
         else:
@@ -66,8 +74,8 @@ class ACModel(nn.Module, RecurrentACModel):
 
         # Define critic's model
         self.critic = nn.Sequential(
-            nn.Linear(self.embedding_size, 64),
-            nn.Tanh(),
+            # nn.Linear(self.embedding_size, 64),
+            # nn.Tanh(),
             nn.Linear(64, 1)
         )
 
@@ -83,7 +91,8 @@ class ACModel(nn.Module, RecurrentACModel):
         return self.image_embedding_size
 
     def forward(self, obs, memory):
-        x = torch.transpose(torch.transpose(obs.image, 1, 3), 2, 3)
+        x = obs.image[:,:,:,0].view(obs.image.size(0),-1)
+        # x = torch.transpose(torch.transpose(obs.image, 1, 3), 2, 3)
         x = self.image_conv(x)
         x = x.reshape(x.shape[0], -1)
 

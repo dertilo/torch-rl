@@ -20,7 +20,7 @@ from model import ACModel
 # Parse arguments
 
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-parser.add_argument("--algo", default='ppo',
+parser.add_argument("--algo", default='a2c',
                     help="algorithm to use: a2c | ppo (REQUIRED)")
 parser.add_argument("--env", default='MiniGrid-Empty-8x8-v0',
                     help="name of the environment to train on (REQUIRED)")
@@ -30,15 +30,15 @@ parser.add_argument("--seed", type=int, default=1,
                     help="random seed (default: 1)")
 parser.add_argument("--procs", type=int, default=16,
                     help="number of processes (default: 16)")
-parser.add_argument("--frames", type=int, default=10**7,
+parser.add_argument("--frames", type=int, default=80*200,
                     help="number of frames of training (default: 10e7)")
 parser.add_argument("--log-interval", type=int, default=1,
                     help="number of updates between two logs (default: 1)")
-parser.add_argument("--save-interval", type=int, default=0,
+parser.add_argument("--save-interval", type=int, default=10,
                     help="number of updates between two saves (default: 0, 0 means no saving)")
 parser.add_argument("--tb", action="store_true", default=False,
                     help="log into Tensorboard")
-parser.add_argument("--frames-per-proc", type=int, default=None,
+parser.add_argument("--num-rollout-steps", type=int, default=5,
                     help="number of frames per process before update (default: 5 for A2C and 128 for PPO)")
 parser.add_argument("--discount", type=float, default=0.99,
                     help="discount factor (default: 0.99)")
@@ -129,11 +129,11 @@ logger.info("CUDA available: {}\n".format(torch.cuda.is_available()))
 # Define actor-critic algo
 
 if args.algo == "a2c":
-    algo = A2CAlgo(envs, acmodel, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
+    algo = A2CAlgo(envs, acmodel, args.num_rollout_steps, args.discount, args.lr, args.gae_lambda,
                             args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
                             args.optim_alpha, args.optim_eps, preprocess_obss)
 elif args.algo == "ppo":
-    algo = PPOAlgo(envs, acmodel, args.frames_per_proc, args.discount, args.lr, args.gae_lambda,
+    algo = PPOAlgo(envs, acmodel, args.num_rollout_steps, args.discount, args.lr, args.gae_lambda,
                             args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
                             args.optim_eps, args.clip_eps, args.epochs, args.batch_size, preprocess_obss)
 else:
@@ -191,16 +191,16 @@ while num_frames < args.frames:
 
         status = {"num_frames": num_frames, "update": update}
 
-    # Save vocabulary and model
+# Save vocabulary and model
 
-    if args.save_interval > 0 and update % args.save_interval == 0:
-        preprocess_obss.vocab.save()
+# if args.save_interval > 0 and update % args.save_interval == 0:
+preprocess_obss.vocab.save()
 
-        if torch.cuda.is_available():
-            acmodel.cpu()
-        utils.save_model(acmodel, model_dir)
-        logger.info("Model successfully saved")
-        if torch.cuda.is_available():
-            acmodel.cuda()
+if torch.cuda.is_available():
+    acmodel.cpu()
+utils.save_model(acmodel, model_dir)
+logger.info("Model successfully saved")
+if torch.cuda.is_available():
+    acmodel.cuda()
 
-        utils.save_status(status, model_dir)
+utils.save_status(status, model_dir)
