@@ -76,21 +76,10 @@ class BaseAlgo(ABC):
         assert self.acmodel.recurrent or self.recurrence == 1
         assert self.num_rollout_steps % self.recurrence == 0
 
-        # Initialize experience values
-
-        shape = (self.num_rollout_steps, self.num_envs)
-
-
-        self.obss = [None]*(shape[0])
         if self.acmodel.recurrent:
-            self.memory = torch.zeros(shape[1], self.acmodel.memory_size, device=self.device)
-            self.memories = torch.zeros(*shape, self.acmodel.memory_size, device=self.device)
-        self.mask = torch.ones(shape[1], device=self.device)
-        self.masks = torch.zeros(*shape, device=self.device)
-        self.advantages = torch.zeros(*shape, device=self.device)
-
+            self.hidden_states = torch.zeros(self.num_envs, self.acmodel.memory_size, device=self.device)
         # Initialize log values
-
+        self.last_dones = torch.zeros(self.num_envs, device=self.device)
         self.log_episode_return = torch.zeros(self.num_envs, device=self.device)
         self.log_episode_reshaped_return = torch.zeros(self.num_envs, device=self.device)
         self.log_episode_num_frames = torch.zeros(self.num_envs, device=self.device)
@@ -122,43 +111,44 @@ class BaseAlgo(ABC):
         """
         exp = {key:torch.zeros(*(self.num_rollout_steps, self.num_envs), device=self.device)
                for key in ['actions','values','logprobs','rewards','dones']}
+        exp['hidden_states'] = torch.zeros(*(self.num_rollout_steps,)+tuple(self.hidden_states.shape), device=self.device)
+        exp['infos'] = [None for _ in range(self.num_rollout_steps)]
         exp['observations'] = [None for _ in range(self.num_rollout_steps)]
+
         last_observation = self.last_observation
+        hidden_states = self.hidden_states
 
         for i in range(self.num_rollout_steps):
             preprocessed_obs = self.preprocess_obss(last_observation, device=self.device)
             with torch.no_grad():
                 if self.acmodel.recurrent:
-                    dist, values, memory = self.acmodel(preprocessed_obs, self.memory * self.mask.unsqueeze(1))
+                    dist, values, hidden_states = self.acmodel(preprocessed_obs, hidden_states)
                 else:
                     dist, values = self.acmodel(preprocessed_obs)
+                    hidden_states = None
             action = dist.sample()
             logprob = dist.log_prob(action)
-            obs, reward, done, _ = self.env.step(action.cpu().numpy())
+            obs, reward, dones, infos = self.env.step(action.cpu().numpy())
             reward = torch.tensor(reward, device=self.device)
-            done = torch.tensor(done, device=self.device, dtype=torch.float)
-            for key,vals in zip(exp.keys(),[action,values,logprob,reward,done]):
-                exp[key][i]=vals
-            exp['observations'][i]=last_observation
-            last_observation = obs
-            if self.acmodel.recurrent:
-                self.memories[i] = self.memory
-                self.memory = memory
-            self.masks[i] = self.mask
-            self.mask = 1 - torch.tensor(done, device=self.device, dtype=torch.float)
+            dones = torch.tensor(dones, device=self.device, dtype=torch.float)
+            hidden_states = hidden_states * (1 - dones).unsqueeze(1)
 
-            self.logging_stuff(done, reward)
+            for key,vals in zip(exp.keys(),[action,values,logprob,reward,dones,hidden_states,infos,last_observation]):
+                exp[key][i]=vals
+            last_observation = obs
+            self.logging_stuff(dones, reward)
 
         self.last_observation = last_observation
+        self.hidden_states = exp['hidden_states'][-1]
 
         preprocessed_obs = self.preprocess_obss(self.last_observation, device=self.device)
         with torch.no_grad():
             if self.acmodel.recurrent:
-                _, next_value, _ = self.acmodel(preprocessed_obs, self.memory * self.mask.unsqueeze(1))
+                _, next_value, _ = self.acmodel(preprocessed_obs, self.hidden_states)
             else:
                 _, next_value = self.acmodel(preprocessed_obs)
 
-        self.advantages = self.generalized_advantage_estimation(
+        advantages = self.generalized_advantage_estimation(
             rewards=exp['rewards'],
             values=torch.cat([exp['values'], next_value.unsqueeze(0)], dim=0),
             dones=exp['dones'])
@@ -168,15 +158,14 @@ class BaseAlgo(ABC):
                     for j in range(self.num_envs)
                     for i in range(self.num_rollout_steps)]
         if self.acmodel.recurrent:
-            # T x P x D -> P x T x D -> (P * T) x D
-            exps.memory = self.memories.transpose(0, 1).reshape(-1, *self.memories.shape[2:])
-            # T x P -> P x T -> (P * T) x 1
-            exps.mask = self.masks.transpose(0, 1).reshape(-1).unsqueeze(1)
+            exps.memory = exp['hidden_states'].transpose(0, 1).reshape(-1, *exp['hidden_states'].shape[2:])
+            mask = torch.cat((self.last_dones.unsqueeze(0), 1 - exp['dones'][:-1]), dim=0)
+            exps.mask = mask.transpose(0, 1).reshape(-1).unsqueeze(1)
         # for all tensors below, T x P -> P x T -> P * T
         exps.action = exp['actions'].transpose(0, 1).reshape(-1)
         exps.value = exp['values'].transpose(0, 1).reshape(-1)
         exps.reward = exp['rewards'].transpose(0, 1).reshape(-1)
-        exps.advantage = self.advantages.transpose(0, 1).reshape(-1)
+        exps.advantage = advantages.transpose(0, 1).reshape(-1)
         exps.returnn = exps.value + exps.advantage
         exps.log_prob = exp['logprobs'].transpose(0, 1).reshape(-1)
 
@@ -210,8 +199,8 @@ class BaseAlgo(ABC):
                 self.log_done_counter += 1
                 self.log_return.append(self.log_episode_return[i].item())
                 self.log_num_frames.append(self.log_episode_num_frames[i].item())
-        self.log_episode_return *= self.mask
-        self.log_episode_num_frames *= self.mask
+        self.log_episode_return *= 1-done
+        self.log_episode_num_frames *= 1-done
 
     def generalized_advantage_estimation(self,rewards,values,dones):
         assert values.shape[0]==1+self.num_rollout_steps
