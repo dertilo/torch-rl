@@ -66,8 +66,9 @@ class BaseAlgo(ABC):
         # Store helpers values
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.obs = self.env.reset()
-        self.num_envs = len(self.obs)
+        self.last_observation = self.env.reset()
+
+        self.num_envs = len(self.last_observation)
         self.num_frames = self.num_rollout_steps * self.num_envs
 
         # Control parameters
@@ -123,11 +124,11 @@ class BaseAlgo(ABC):
             Useful stats about the training process, including the average
             reward, policy loss, value loss, etc.
         """
-
+        dones = torch.zeros(*(self.num_rollout_steps, self.num_envs), device=self.device)
         for i in range(self.num_rollout_steps):
             # Do one agent-environment interaction
 
-            preprocessed_obs = self.preprocess_obss(self.obs, device=self.device)
+            preprocessed_obs = self.preprocess_obss(self.last_observation, device=self.device)
             with torch.no_grad():
                 if self.acmodel.recurrent:
                     dist, value, memory = self.acmodel(preprocessed_obs, self.memory * self.mask.unsqueeze(1))
@@ -136,11 +137,11 @@ class BaseAlgo(ABC):
             action = dist.sample()
 
             obs, reward, done, _ = self.env.step(action.cpu().numpy())
-
+            dones[i] = torch.tensor(done, device=self.device, dtype=torch.float)
             # Update experiences values
 
-            self.obss[i] = self.obs
-            self.obs = obs
+            self.obss[i] = self.last_observation
+            self.last_observation = obs
             if self.acmodel.recurrent:
                 self.memories[i] = self.memory
                 self.memory = memory
@@ -176,28 +177,15 @@ class BaseAlgo(ABC):
 
         # Add advantage and return to experiences
 
-        preprocessed_obs = self.preprocess_obss(self.obs, device=self.device)
+        preprocessed_obs = self.preprocess_obss(self.last_observation, device=self.device)
         with torch.no_grad():
             if self.acmodel.recurrent:
                 _, next_value, _ = self.acmodel(preprocessed_obs, self.memory * self.mask.unsqueeze(1))
             else:
                 _, next_value = self.acmodel(preprocessed_obs)
 
-        for i in reversed(range(self.num_rollout_steps)):
-            next_mask = self.masks[i+1] if i < self.num_rollout_steps - 1 else self.mask
-            next_value = self.values[i+1] if i < self.num_rollout_steps - 1 else next_value
-            next_advantage = self.advantages[i+1] if i < self.num_rollout_steps - 1 else 0
-
-            delta = self.rewards[i] + self.discount * next_value * next_mask - self.values[i]
-            self.advantages[i] = delta + self.discount * self.gae_lambda * next_advantage * next_mask
-
-        # Define experiences:
-        #   the whole experience is the concatenation of the experience
-        #   of each process.
-        # In comments below:
-        #   - T is self.num_rollout_steps,
-        #   - P is self.num_procs,
-        #   - D is the dimensionality.
+        values = torch.cat([self.values, next_value.unsqueeze(0)], dim=0)
+        self.advantages = self.generalized_advantage_estimation(self.rewards, values, dones)
 
         exps = DictList()
         exps.obs = [self.obss[i][j]
@@ -237,6 +225,16 @@ class BaseAlgo(ABC):
         self.log_num_frames = self.log_num_frames[-self.num_envs:]
 
         return exps, log
+
+    def generalized_advantage_estimation(self,rewards,values,dones):
+        assert values.shape[0]==1+self.num_rollout_steps
+        advantage_buffer = torch.zeros_like(rewards)
+        next_advantage = 0
+        for i in reversed(range(self.num_rollout_steps)):
+            bellman_delta = rewards[i] + self.discount * values[i+1] * (1-dones[i]) - values[i]
+            advantage_buffer[i] = bellman_delta + self.discount * self.gae_lambda * next_advantage * (1 - dones[i])
+            next_advantage = advantage_buffer[i]
+        return advantage_buffer
 
     @abstractmethod
     def update_parameters(self):
