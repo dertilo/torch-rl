@@ -95,15 +95,7 @@ logger.info("{}\n".format(args))
 utils.seed(args.seed)
 
 # Generate environments
-def build_env_supplier(i):
-    def env_supplier():
-        env = gym.make(args.env)
-        env.seed(args.seed + 10000 * i)
-        return env
-    return env_supplier
-
-envs = ParallelEnv([build_env_supplier(i) for i in range(args.procs)])
-
+envs = ParallelEnv.build(args.env,args.procs,args.seed)
 # Define obss preprocessor
 
 obs_space, preprocess_obss = utils.get_obss_preprocessor(args.env, envs.observation_space, model_dir)

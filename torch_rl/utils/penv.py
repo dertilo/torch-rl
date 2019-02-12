@@ -54,3 +54,15 @@ class ParallelEnv(gym.Env):
 
     def render(self):
         raise NotImplementedError
+
+    @staticmethod
+    def build(env_name,num_envs,seed):
+        def build_env_supplier(i):
+            def env_supplier():
+                env = gym.make(env_name)
+                env.seed(seed + 10000 * i)
+                return env
+
+            return env_supplier
+
+        return ParallelEnv([build_env_supplier(i) for i in range(num_envs)])
