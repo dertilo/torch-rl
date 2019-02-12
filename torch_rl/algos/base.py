@@ -112,27 +112,8 @@ class BaseAlgo(ABC):
             values=exp['values'],
             dones=exp['dones'])
 
-        exps = DictList()
-        exps.obs = [exp['observations'][i][j]
-                    for j in range(self.num_envs)
-                    for i in range(self.num_rollout_steps)]
-
-        exps.memory = exp['hidden_states'].transpose(0, 1).reshape(-1, *exp['hidden_states'].shape[2:])
-        mask = torch.cat((1-self.last_dones.unsqueeze(0), 1 - exp['dones'][:-1]), dim=0)
-        exps.mask = mask.transpose(0, 1).reshape(-1).unsqueeze(1)
-
+        exps = self.repacking_experiences(advantages, exp)
         self.last_dones = exp['dones'][-1]
-
-        # for all tensors below, T x P -> P x T -> P * T
-        exps.action = exp['actions'].transpose(0, 1).reshape(-1)
-        exps.value = exp['values'].transpose(0, 1).reshape(-1)
-        exps.reward = exp['rewards'].transpose(0, 1).reshape(-1)
-        exps.advantage = advantages.transpose(0, 1).reshape(-1)
-        exps.returnn = exps.value + exps.advantage
-        exps.log_prob = exp['logprobs'].transpose(0, 1).reshape(-1)
-
-        exps.obs = self.preprocess_obss(exps.obs, device=self.device)
-
         keep = max(self.log_done_counter, self.num_envs)
 
         log = {
@@ -148,6 +129,24 @@ class BaseAlgo(ABC):
         self.log_num_frames = self.log_num_frames[-self.num_envs:]
 
         return exps, log
+
+    def repacking_experiences(self, advantages, exp):
+        exps = DictList()
+        exps.obs = [exp['observations'][i][j]
+                    for j in range(self.num_envs)
+                    for i in range(self.num_rollout_steps)]
+        exps.memory = exp['hidden_states'].transpose(0, 1).reshape(-1, *exp['hidden_states'].shape[2:])
+        mask = torch.cat((1 - self.last_dones.unsqueeze(0), 1 - exp['dones'][:-1]), dim=0)
+        exps.mask = mask.transpose(0, 1).reshape(-1).unsqueeze(1)
+        # for all tensors below, T x P -> P x T -> P * T
+        exps.action = exp['actions'].transpose(0, 1).reshape(-1)
+        exps.value = exp['values'].transpose(0, 1).reshape(-1)
+        exps.reward = exp['rewards'].transpose(0, 1).reshape(-1)
+        exps.advantage = advantages.transpose(0, 1).reshape(-1)
+        exps.returnn = exps.value + exps.advantage
+        exps.log_prob = exp['logprobs'].transpose(0, 1).reshape(-1)
+        exps.obs = self.preprocess_obss(exps.obs, device=self.device)
+        return exps
 
     def gather_exp_via_rollout(self, hidden_states, last_observation):
         exp = {key: torch.zeros(*(self.num_rollout_steps, self.num_envs), device=self.device)
