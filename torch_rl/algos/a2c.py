@@ -2,18 +2,19 @@ import numpy
 import torch
 import torch.nn.functional as F
 
+from model import ACModel
 from torch_rl.algos.base import BaseAlgo
 
 class A2CAlgo(BaseAlgo):
     """The class for the Advantage Actor-Critic algorithm."""
 
-    def __init__(self, envs, acmodel, num_frames_per_proc=None, discount=0.99, lr=7e-4, gae_lambda=0.95,
-                 entropy_coef=0.01, value_loss_coef=0.5, max_grad_norm=0.5, recurrence=4,
+    def __init__(self, envs, acmodel:ACModel, num_frames_per_proc=None, discount=0.99, lr=7e-4, gae_lambda=0.95,
+                 entropy_coef=0.01, value_loss_coef=0.5, max_grad_norm=0.5, num_recurr_steps=4,
                  rmsprop_alpha=0.99, rmsprop_eps=1e-5, preprocess_obss=None, reshape_reward=None):
         num_frames_per_proc = num_frames_per_proc or 8
 
         super().__init__(envs, acmodel, num_frames_per_proc, discount, lr, gae_lambda, entropy_coef,
-                         value_loss_coef, max_grad_norm, recurrence, preprocess_obss, reshape_reward)
+                         value_loss_coef, max_grad_norm, num_recurr_steps, preprocess_obss, reshape_reward)
 
         self.optimizer = torch.optim.RMSprop(self.acmodel.parameters(), lr,
                                              alpha=rmsprop_alpha, eps=rmsprop_eps)
@@ -37,20 +38,14 @@ class A2CAlgo(BaseAlgo):
 
         # Initialize memory
 
-        if self.acmodel.recurrent:
-            memory = exps.memory[inds]
+        memory = exps.memory[inds]
 
-        for i in range(self.recurrence):
+        for i in range(self.num_recurr_steps):
             # Create a sub-batch of experience
 
             sb = exps[inds + i]
 
-            # Compute loss
-
-            if self.acmodel.recurrent:
-                dist, value, memory = self.acmodel(sb.obs, memory * sb.mask)
-            else:
-                dist, value = self.acmodel(sb.obs)
+            dist, value, memory = self.acmodel(sb.obs, memory * sb.mask)
 
             entropy = dist.entropy().mean()
 
@@ -70,11 +65,11 @@ class A2CAlgo(BaseAlgo):
 
         # Update update values
 
-        update_entropy /= self.recurrence
-        update_value /= self.recurrence
-        update_policy_loss /= self.recurrence
-        update_value_loss /= self.recurrence
-        update_loss /= self.recurrence
+        update_entropy /= self.num_recurr_steps
+        update_value /= self.num_recurr_steps
+        update_policy_loss /= self.num_recurr_steps
+        update_value_loss /= self.num_recurr_steps
+        update_loss /= self.num_recurr_steps
 
         # Update actor-critic
 
@@ -108,5 +103,5 @@ class A2CAlgo(BaseAlgo):
             the indexes of the experiences to be used at first
         """
 
-        starting_indexes = numpy.arange(0, self.num_frames, self.recurrence)
+        starting_indexes = numpy.arange(0, self.num_frames, self.num_recurr_steps)
         return starting_indexes

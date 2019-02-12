@@ -9,19 +9,19 @@ class PPOAlgo(BaseAlgo):
     ([Schulman et al., 2015](https://arxiv.org/abs/1707.06347))."""
 
     def __init__(self, envs, acmodel, num_frames_per_proc=None, discount=0.99, lr=7e-4, gae_lambda=0.95,
-                 entropy_coef=0.01, value_loss_coef=0.5, max_grad_norm=0.5, recurrence=4,
+                 entropy_coef=0.01, value_loss_coef=0.5, max_grad_norm=0.5, num_recurr_steps=4,
                  adam_eps=1e-5, clip_eps=0.2, epochs=4, batch_size=256, preprocess_obss=None,
                  reshape_reward=None):
         num_frames_per_proc = num_frames_per_proc or 128
 
         super().__init__(envs, acmodel, num_frames_per_proc, discount, lr, gae_lambda, entropy_coef,
-                         value_loss_coef, max_grad_norm, recurrence, preprocess_obss, reshape_reward)
+                         value_loss_coef, max_grad_norm, num_recurr_steps, preprocess_obss, reshape_reward)
 
         self.clip_eps = clip_eps
         self.epochs = epochs
         self.batch_size = batch_size
 
-        assert self.batch_size % self.recurrence == 0
+        assert self.batch_size % self.num_recurr_steps == 0
 
         self.optimizer = torch.optim.Adam(self.acmodel.parameters(), lr, eps=adam_eps)
         self.batch_num = 0
@@ -54,7 +54,7 @@ class PPOAlgo(BaseAlgo):
                 if self.acmodel.recurrent:
                     memory = exps.memory[inds]
 
-                for i in range(self.recurrence):
+                for i in range(self.num_recurr_steps):
                     # Create a sub-batch of experience
 
                     sb = exps[inds + i]
@@ -90,16 +90,16 @@ class PPOAlgo(BaseAlgo):
 
                     # Update memories for next epoch
 
-                    if self.acmodel.recurrent and i < self.recurrence - 1:
+                    if self.acmodel.recurrent and i < self.num_recurr_steps - 1:
                         exps.memory[inds + i + 1] = memory.detach()
 
                 # Update batch values
 
-                batch_entropy /= self.recurrence
-                batch_value /= self.recurrence
-                batch_policy_loss /= self.recurrence
-                batch_value_loss /= self.recurrence
-                batch_loss /= self.recurrence
+                batch_entropy /= self.num_recurr_steps
+                batch_value /= self.num_recurr_steps
+                batch_policy_loss /= self.num_recurr_steps
+                batch_value_loss /= self.num_recurr_steps
+                batch_loss /= self.num_recurr_steps
 
                 # Update actor-critic
 
@@ -141,16 +141,16 @@ class PPOAlgo(BaseAlgo):
             the indexes of the experiences to be used at first for each batch
         """
 
-        indexes = numpy.arange(0, self.num_frames, self.recurrence)
+        indexes = numpy.arange(0, self.num_frames, self.num_recurr_steps)
         indexes = numpy.random.permutation(indexes)
 
         # Shift starting indexes by self.recurrence//2 half the time
         if self.batch_num % 2 == 1:
-            indexes = indexes[(indexes + self.recurrence) % self.num_frames_per_proc != 0]
-            indexes += self.recurrence // 2
+            indexes = indexes[(indexes + self.num_recurr_steps) % self.num_frames_per_proc != 0]
+            indexes += self.num_recurr_steps // 2
         self.batch_num += 1
 
-        num_indexes = self.batch_size // self.recurrence
+        num_indexes = self.batch_size // self.num_recurr_steps
         batches_starting_indexes = [indexes[i:i+num_indexes] for i in range(0, len(indexes), num_indexes)]
 
         return batches_starting_indexes

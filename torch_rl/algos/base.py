@@ -5,14 +5,15 @@ import gym
 import torch
 import numpy
 
+from model import ACModel
 from torch_rl.format import default_preprocess_obss
 from torch_rl.utils import DictList, ParallelEnv
 
 class BaseAlgo(ABC):
     """The base class for RL algorithms."""
 
-    def __init__(self, env:gym.Env, acmodel, num_rollout_steps, discount, lr, gae_lambda, entropy_coef,
-                 value_loss_coef, max_grad_norm, recurrence, preprocess_obss, reshape_reward):
+    def __init__(self, env:gym.Env, acmodel:ACModel, num_rollout_steps, discount, lr, gae_lambda, entropy_coef,
+                 value_loss_coef, max_grad_norm, num_recurr_steps, preprocess_obss, reshape_reward):
         """
         Initializes a `BaseAlgo` instance.
 
@@ -59,11 +60,9 @@ class BaseAlgo(ABC):
         self.entropy_coef = entropy_coef
         self.value_loss_coef = value_loss_coef
         self.max_grad_norm = max_grad_norm
-        self.recurrence = recurrence
+        self.num_recurr_steps = num_recurr_steps
         self.preprocess_obss = preprocess_obss or default_preprocess_obss
         self.reshape_reward = reshape_reward
-
-        # Store helpers values
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.last_observation = self.env.reset()
@@ -71,13 +70,7 @@ class BaseAlgo(ABC):
         self.num_envs = len(self.last_observation)
         self.num_frames = self.num_rollout_steps * self.num_envs
 
-        # Control parameters
-
-        assert self.acmodel.recurrent or self.recurrence == 1
-        assert self.num_rollout_steps % self.recurrence == 0
-
-        if self.acmodel.recurrent:
-            self.hidden_states = torch.zeros(self.num_envs, self.acmodel.memory_size, device=self.device)
+        self.hidden_states = torch.zeros(self.num_envs, self.acmodel.memory_size, device=self.device)
         # Initialize log values
         self.last_dones = torch.zeros(self.num_envs, device=self.device)
         self.log_episode_return = torch.zeros(self.num_envs, device=self.device)
@@ -121,11 +114,7 @@ class BaseAlgo(ABC):
         for i in range(self.num_rollout_steps):
             preprocessed_obs = self.preprocess_obss(last_observation, device=self.device)
             with torch.no_grad():
-                if self.acmodel.recurrent:
-                    dist, values, hidden_states = self.acmodel(preprocessed_obs, hidden_states)
-                else:
-                    dist, values = self.acmodel(preprocessed_obs)
-                    hidden_states = None
+                dist, values, hidden_states = self.acmodel(preprocessed_obs, hidden_states)
             action = dist.sample()
             logprob = dist.log_prob(action)
             obs, reward, dones, infos = self.env.step(action.cpu().numpy())
@@ -143,10 +132,7 @@ class BaseAlgo(ABC):
 
         preprocessed_obs = self.preprocess_obss(self.last_observation, device=self.device)
         with torch.no_grad():
-            if self.acmodel.recurrent:
-                _, next_value, _ = self.acmodel(preprocessed_obs, self.hidden_states)
-            else:
-                _, next_value = self.acmodel(preprocessed_obs)
+            _, next_value, _ = self.acmodel(preprocessed_obs, self.hidden_states)
 
         advantages = self.generalized_advantage_estimation(
             rewards=exp['rewards'],
@@ -157,10 +143,11 @@ class BaseAlgo(ABC):
         exps.obs = [exp['observations'][i][j]
                     for j in range(self.num_envs)
                     for i in range(self.num_rollout_steps)]
-        if self.acmodel.recurrent:
-            exps.memory = exp['hidden_states'].transpose(0, 1).reshape(-1, *exp['hidden_states'].shape[2:])
-            mask = torch.cat((1-self.last_dones.unsqueeze(0), 1 - exp['dones'][:-1]), dim=0)
-            exps.mask = mask.transpose(0, 1).reshape(-1).unsqueeze(1)
+
+        exps.memory = exp['hidden_states'].transpose(0, 1).reshape(-1, *exp['hidden_states'].shape[2:])
+        mask = torch.cat((1-self.last_dones.unsqueeze(0), 1 - exp['dones'][:-1]), dim=0)
+        exps.mask = mask.transpose(0, 1).reshape(-1).unsqueeze(1)
+
         self.last_dones = exp['dones'][-1]
 
         # for all tensors below, T x P -> P x T -> P * T
