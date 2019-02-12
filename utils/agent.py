@@ -16,13 +16,13 @@ class Agent:
         self.num_envs = num_envs
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.memories = torch.zeros(self.num_envs, self.acmodel.memory_size)
+        self.hidden_state = torch.zeros(self.num_envs, self.acmodel.hiddenstate_size)
 
     def get_actions(self, obss):
         preprocessed_obss = self.preprocess_obss(obss)
 
         with torch.no_grad():
-            dist, _, self.memories = self.acmodel(preprocessed_obss, self.memories)
+            dist, _, self.hidden_state = self.acmodel(preprocessed_obss, self.hidden_state)
 
         if self.argmax:
             actions = dist.probs.max(1, keepdim=True)[1]
@@ -39,7 +39,7 @@ class Agent:
 
     def analyze_feedbacks(self, rewards, dones):
         masks = 1 - torch.tensor(dones, dtype=torch.float).unsqueeze(1)
-        self.memories *= masks
+        self.hidden_state *= masks
 
     def analyze_feedback(self, reward, done):
         return self.analyze_feedbacks([reward], [done])

@@ -70,17 +70,16 @@ class BaseAlgo(ABC):
         self.num_envs = len(self.last_observation)
         self.num_frames = self.num_rollout_steps * self.num_envs
 
-        self.hidden_states = torch.zeros(self.num_envs, self.acmodel.memory_size, device=self.device)
+        self.hidden_states = torch.zeros(self.num_envs, self.acmodel.hiddenstate_size, device=self.device)
         # Initialize log values
         self.last_dones = torch.zeros(self.num_envs, device=self.device)
-        self.log_episode_return = torch.zeros(self.num_envs, device=self.device)
+        self.rewards_sum = torch.zeros(self.num_envs, device=self.device)
         self.log_episode_reshaped_return = torch.zeros(self.num_envs, device=self.device)
-        self.log_episode_num_frames = torch.zeros(self.num_envs, device=self.device)
+        self.num_steps_sum = torch.zeros(self.num_envs, device=self.device)
 
         self.log_done_counter = 0
-        self.log_return = [0] * self.num_envs
-        self.log_reshaped_return = [0] * self.num_envs
-        self.log_num_frames = [0] * self.num_envs
+        self.log_episode_rewards = []
+        self.log_num_steps = []
 
     def collect_experiences(self):
         """Collects rollouts and computes advantages.
@@ -114,19 +113,17 @@ class BaseAlgo(ABC):
 
         exps = self.repacking_experiences(advantages, exp)
         self.last_dones = exp['dones'][-1]
-        keep = max(self.log_done_counter, self.num_envs)
+        keep = max(self.log_done_counter, self.num_envs)# in one rollout there can be multiple dones!!
 
         log = {
-            "return_per_episode": self.log_return[-keep:],
-            "reshaped_return_per_episode": self.log_reshaped_return[-keep:],
-            "num_frames_per_episode": self.log_num_frames[-keep:],
+            "return_per_episode": self.log_episode_rewards[-keep:],
+            "num_frames_per_episode": self.log_num_steps[-keep:],
             "num_frames": self.num_frames
         }
 
         self.log_done_counter = 0
-        self.log_return = self.log_return[-self.num_envs:]
-        self.log_reshaped_return = self.log_reshaped_return[-self.num_envs:]
-        self.log_num_frames = self.log_num_frames[-self.num_envs:]
+        self.log_episode_rewards = self.log_episode_rewards[-self.num_envs:]
+        self.log_num_steps = self.log_num_steps[-self.num_envs:]
 
         return exps, log
 
@@ -172,15 +169,15 @@ class BaseAlgo(ABC):
         return exp, last_observation
 
     def logging_stuff(self, done, reward):
-        self.log_episode_return += torch.tensor(reward, device=self.device, dtype=torch.float)
-        self.log_episode_num_frames += torch.ones(self.num_envs, device=self.device)
+        self.rewards_sum += torch.tensor(reward, device=self.device, dtype=torch.float)
+        self.num_steps_sum += torch.ones(self.num_envs, device=self.device)
         for i, done_ in enumerate(done):
             if done_:
                 self.log_done_counter += 1
-                self.log_return.append(self.log_episode_return[i].item())
-                self.log_num_frames.append(self.log_episode_num_frames[i].item())
-        self.log_episode_return *= 1-done
-        self.log_episode_num_frames *= 1-done
+                self.log_episode_rewards.append(self.rewards_sum[i].item())
+                self.log_num_steps.append(self.num_steps_sum[i].item())
+        self.rewards_sum *= 1 - done
+        self.num_steps_sum *= 1 - done
 
     def generalized_advantage_estimation(self,rewards,values,dones):
         def calc_advantage(dones, rewards, values, num_rollout_steps, discount, gae_lambda):

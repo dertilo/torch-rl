@@ -21,7 +21,7 @@ class ACModel(nn.Module):
 
         # Decide which components are enabled
         self.use_text = use_text
-        self.use_memory = use_memory
+        self.has_hiddenstate = use_memory
 
         # Define image embedding
         # self.image_conv = nn.Sequential(
@@ -46,7 +46,7 @@ class ACModel(nn.Module):
         self.image_embedding_size = 64#((n-1)//2-2)*((m-1)//2-2)*64
 
         # Define memory
-        if self.use_memory:
+        if self.has_hiddenstate:
             self.memory_rnn = nn.LSTMCell(self.image_embedding_size, self.semi_memory_size)
 
         # Define text embedding
@@ -82,7 +82,7 @@ class ACModel(nn.Module):
         self.apply(initialize_parameters)
 
     @property
-    def memory_size(self):
+    def hiddenstate_size(self):
         return 2*self.semi_memory_size
 
     @property
@@ -95,7 +95,7 @@ class ACModel(nn.Module):
         x = self.image_conv(x)
         x = x.reshape(x.shape[0], -1)
 
-        if self.use_memory:
+        if self.has_hiddenstate:
             hidden = (memory[:, :self.semi_memory_size], memory[:, self.semi_memory_size:])
             hidden = self.memory_rnn(x, hidden)
             embedding = hidden[0]
