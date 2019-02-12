@@ -1,3 +1,4 @@
+import torch
 from multiprocessing import Process, Pipe
 from typing import List, Callable
 
@@ -46,8 +47,10 @@ class ParallelEnv(gym.Env):
     def step(self, actions):
         for local, action in zip(self.locals, actions):
             local.send(("step", action))
-        results = zip(*[local.recv() for local in self.locals])
-        return results
+        obs, rewards,dones,infos = zip(*[local.recv() for local in self.locals])
+        rewards = torch.tensor(rewards)
+        dones = torch.tensor(dones, dtype=torch.float)
+        return obs,rewards,dones, infos
 
     def render(self):
         raise NotImplementedError

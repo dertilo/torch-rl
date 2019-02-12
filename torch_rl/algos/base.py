@@ -102,37 +102,13 @@ class BaseAlgo(ABC):
             Useful stats about the training process, including the average
             reward, policy loss, value loss, etc.
         """
-        exp = {key:torch.zeros(*(self.num_rollout_steps, self.num_envs), device=self.device)
-               for key in ['actions','values','logprobs','rewards','dones']}
-        exp['hidden_states'] = torch.zeros(*(self.num_rollout_steps,)+tuple(self.hidden_states.shape), device=self.device)
-        exp['infos'] = [None for _ in range(self.num_rollout_steps)]
-        exp['observations'] = [None for _ in range(self.num_rollout_steps)]
+        exp, self.last_observation = self.gather_exp_via_rollout(self.hidden_states, self.last_observation)
 
-        last_observation = self.last_observation
-        hidden_states = self.hidden_states
-
-        for i in range(self.num_rollout_steps):
-            preprocessed_obs = self.preprocess_obss(last_observation, device=self.device)
-            with torch.no_grad():
-                dist, values, hidden_states = self.acmodel(preprocessed_obs, hidden_states)
-            action = dist.sample()
-            logprob = dist.log_prob(action)
-            obs, reward, dones, infos = self.env.step(action.cpu().numpy())
-            reward = torch.tensor(reward, device=self.device)
-            dones = torch.tensor(dones, device=self.device, dtype=torch.float)
-            hidden_states = hidden_states * (1 - dones).unsqueeze(1)
-
-            for key,vals in zip(exp.keys(),[action,values,logprob,reward,dones,hidden_states,infos,last_observation]):
-                exp[key][i]=vals
-            last_observation = obs
-            self.logging_stuff(dones, reward)
-
-        self.last_observation = last_observation
         self.hidden_states = exp['hidden_states'][-1]
 
-        preprocessed_obs = self.preprocess_obss(self.last_observation, device=self.device)
         with torch.no_grad():
-            _, next_value, _ = self.acmodel(preprocessed_obs, self.hidden_states)
+            _, next_value, _ = self.acmodel(self.preprocess_obss(self.last_observation, device=self.device),
+                                            self.hidden_states)
 
         advantages = self.generalized_advantage_estimation(
             rewards=exp['rewards'],
@@ -175,6 +151,29 @@ class BaseAlgo(ABC):
         self.log_num_frames = self.log_num_frames[-self.num_envs:]
 
         return exps, log
+
+    def gather_exp_via_rollout(self, hidden_states, last_observation):
+        exp = {key: torch.zeros(*(self.num_rollout_steps, self.num_envs), device=self.device)
+               for key in ['actions', 'values', 'logprobs', 'rewards', 'dones']}
+        exp['hidden_states'] = torch.zeros(*(self.num_rollout_steps,) + tuple(self.hidden_states.shape),
+                                           device=self.device)
+        exp['infos'] = [None for _ in range(self.num_rollout_steps)]
+        exp['observations'] = [None for _ in range(self.num_rollout_steps)]
+        for i in range(self.num_rollout_steps):
+            with torch.no_grad():
+                dist, values, hidden_states = self.acmodel(self.preprocess_obss(last_observation, device=self.device),
+                                                           hidden_states)
+            action = dist.sample()
+            logprob = dist.log_prob(action)
+            obs, reward, dones, infos = self.env.step(action.cpu().numpy())
+            hidden_states = hidden_states * (1 - dones).unsqueeze(1)
+
+            for key, vals in zip(exp.keys(),
+                                 [action, values, logprob, reward, dones, hidden_states, infos, last_observation]):
+                exp[key][i] = vals
+            last_observation = obs
+            self.logging_stuff(dones, reward)
+        return exp, last_observation
 
     def logging_stuff(self, done, reward):
         self.log_episode_return += torch.tensor(reward, device=self.device, dtype=torch.float)
