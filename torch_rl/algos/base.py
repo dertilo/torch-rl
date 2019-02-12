@@ -106,13 +106,10 @@ class BaseAlgo(ABC):
 
         self.hidden_states = exp['hidden_states'][-1]
 
-        with torch.no_grad():
-            _, next_value, _ = self.acmodel(self.preprocess_obss(self.last_observation, device=self.device),
-                                            self.hidden_states)
 
         advantages = self.generalized_advantage_estimation(
             rewards=exp['rewards'],
-            values=torch.cat([exp['values'], next_value.unsqueeze(0)], dim=0),
+            values=exp['values'],
             dones=exp['dones'])
 
         exps = DictList()
@@ -187,14 +184,24 @@ class BaseAlgo(ABC):
         self.log_episode_num_frames *= 1-done
 
     def generalized_advantage_estimation(self,rewards,values,dones):
+        def calc_advantage(dones, rewards, values, num_rollout_steps, discount, gae_lambda):
+            advantage_buffer = torch.zeros_like(rewards)
+            next_advantage = 0
+            for i in reversed(range(num_rollout_steps)):
+                bellman_delta = rewards[i] + discount * values[i + 1] * (1 - dones[i]) - values[i]
+                advantage_buffer[i] = bellman_delta + discount * gae_lambda * next_advantage * (1 - dones[i])
+                next_advantage = advantage_buffer[i]
+            return advantage_buffer
+        # --------------------------------------------------------
+        with torch.no_grad():
+            _, next_value, _ = self.acmodel(self.preprocess_obss(self.last_observation, device=self.device),
+                                            self.hidden_states)
+        values = torch.cat([values, next_value.unsqueeze(0)], dim=0)
         assert values.shape[0]==1+self.num_rollout_steps
-        advantage_buffer = torch.zeros_like(rewards)
-        next_advantage = 0
-        for i in reversed(range(self.num_rollout_steps)):
-            bellman_delta = rewards[i] + self.discount * values[i+1] * (1-dones[i]) - values[i]
-            advantage_buffer[i] = bellman_delta + self.discount * self.gae_lambda * next_advantage * (1 - dones[i])
-            next_advantage = advantage_buffer[i]
+
+        advantage_buffer = calc_advantage(dones, rewards, values,self.num_rollout_steps,self.discount,self.gae_lambda)
         return advantage_buffer
+
 
     @abstractmethod
     def update_parameters(self):
