@@ -159,8 +159,10 @@ class BaseAlgo(ABC):
                     for i in range(self.num_rollout_steps)]
         if self.acmodel.recurrent:
             exps.memory = exp['hidden_states'].transpose(0, 1).reshape(-1, *exp['hidden_states'].shape[2:])
-            mask = torch.cat((self.last_dones.unsqueeze(0), 1 - exp['dones'][:-1]), dim=0)
+            mask = torch.cat((1-self.last_dones.unsqueeze(0), 1 - exp['dones'][:-1]), dim=0)
             exps.mask = mask.transpose(0, 1).reshape(-1).unsqueeze(1)
+        self.last_dones = exp['dones'][-1]
+
         # for all tensors below, T x P -> P x T -> P * T
         exps.action = exp['actions'].transpose(0, 1).reshape(-1)
         exps.value = exp['values'].transpose(0, 1).reshape(-1)
@@ -169,11 +171,7 @@ class BaseAlgo(ABC):
         exps.returnn = exps.value + exps.advantage
         exps.log_prob = exp['logprobs'].transpose(0, 1).reshape(-1)
 
-        # Preprocess experiences
-
         exps.obs = self.preprocess_obss(exps.obs, device=self.device)
-
-        # Log some values
 
         keep = max(self.log_done_counter, self.num_envs)
 
