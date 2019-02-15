@@ -24,7 +24,7 @@ class ACModel(nn.Module):
         self.has_hiddenstate = use_memory
 
         # Define image embedding
-        # self.image_conv = nn.Sequential(
+        # self.visual_nn = nn.Sequential(
         #     nn.Conv2d(3, 16, (2, 2)),
         #     nn.ReLU(),
         #     nn.MaxPool2d((2, 2)),
@@ -33,17 +33,19 @@ class ACModel(nn.Module):
         #     nn.Conv2d(32, 64, (2, 2)),
         #     nn.ReLU()
         # )
-        self.image_conv = nn.Sequential(
+        # n = obs_space["image"][0]
+        # m = obs_space["image"][1]
+        # self.image_embedding_size = ((n-1)//2-2)*((m-1)//2-2)*64
+
+        self.image_embedding_size = 64#((n-1)//2-2)*((m-1)//2-2)*64
+        self.visual_nn = nn.Sequential(
             *[
                 nn.Linear(obs_space['image'][0]*obs_space['image'][1], 128),
                 nn.ReLU(),
-                nn.Linear(128, 64),
+                nn.Linear(128, self.image_embedding_size),
                 nn.ReLU(),
              ]
         )
-        n = obs_space["image"][0]
-        m = obs_space["image"][1]
-        self.image_embedding_size = 64#((n-1)//2-2)*((m-1)//2-2)*64
 
         # Define memory
         if self.has_hiddenstate:
@@ -92,7 +94,7 @@ class ACModel(nn.Module):
     def forward(self, obs, memory):
         x = obs.image[:,:,:,0].view(obs.image.size(0),-1)
         # x = torch.transpose(torch.transpose(obs.image, 1, 3), 2, 3)
-        x = self.image_conv(x)
+        x = self.visual_nn(x)
         x = x.reshape(x.shape[0], -1)
 
         if self.has_hiddenstate:
