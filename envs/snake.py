@@ -88,10 +88,10 @@ class SnakeEnv(MiniGridEnv):
         else:
             assert False, "unknown action: %d"%action
 
-        fwd_pos = self.front_pos
+        fwd_pos = self.agent_pos + self.dir_vec
         fwd_cell = self.grid.get(*fwd_pos)
 
-        if fwd_cell == None:
+        if fwd_cell is None:
             self.grid.set(*self.agent_pos, Lava())
             self.snake.grow_head(*self.agent_pos)
             self.grid.set(*self.snake.rm_tail(), None)
@@ -99,7 +99,7 @@ class SnakeEnv(MiniGridEnv):
 
             reward = -0.001
 
-        elif fwd_cell != None and fwd_cell.type == 'goal':
+        elif fwd_cell.type == 'goal':
             self.grid.set(*self.agent_pos, Lava())
             self.snake.grow_head(*self.agent_pos)
             self.agent_pos = fwd_pos
@@ -107,8 +107,8 @@ class SnakeEnv(MiniGridEnv):
             self.spawn_new_food()
             reward = 1.0
 
-        elif fwd_cell is not None and (fwd_cell.type == 'lava' or fwd_cell.type == 'wall'):
-            reward = -1.0
+        elif (fwd_cell.type == 'lava' or fwd_cell.type == 'wall'):
+            reward = .0
             done = True
 
         else:
