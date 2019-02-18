@@ -23,20 +23,6 @@ def save_model(model, model_dir):
     utils.create_folders_if_necessary(path)
     torch.save(model, path)
 
-def get_status_path(model_dir):
-    return os.path.join(model_dir, "status.json")
-
-def load_status(model_dir):
-    path = get_status_path(model_dir)
-    with open(path) as file:
-        return json.load(file)
-
-def save_status(status, model_dir):
-    path = get_status_path(model_dir)
-    utils.create_folders_if_necessary(path)
-    with open(path, "w") as file:
-        json.dump(status, file)
-
 def get_log_path(model_dir):
     return os.path.join(model_dir, "log.txt")
 

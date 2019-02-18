@@ -10,7 +10,7 @@ except ImportError:
     pass
 
 import utils
-
+import envs
 
 
 def visualize_it(env_name,model_file,pause_dur=0.1,seed=0,shift=0,argmax=False):
@@ -44,9 +44,9 @@ if __name__ == '__main__':
     # Parse arguments
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--env", default='MiniGrid-Empty-8x8-v0',
+    parser.add_argument("--env", default='MiniGrid-Snake-v0',
                         help="name of the environment to be run (REQUIRED)")
-    parser.add_argument("--model", default='MiniGrid-Empty-8x8-v0_a2c_seed1_19-02-12-11-46-34',
+    parser.add_argument("--model", default='storage/mlp-128-64',
                         help="name of the trained model (REQUIRED)")
     parser.add_argument("--seed", type=int, default=0,
                         help="random seed (default: 0)")
