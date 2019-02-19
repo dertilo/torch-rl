@@ -4,18 +4,18 @@ import argparse
 import gym
 import time
 
+from utils.agent import Agent
+from utils.general import set_seed
+
 try:
     import gym_minigrid
 except ImportError:
     pass
 
-import utils
-import envs
-
 
 def visualize_it(env_name,model_file,pause_dur=0.1,seed=0,shift=0,argmax=False):
     # Set seed for all randomness sources
-    utils.seed(seed)
+    set_seed(seed)
     # Generate environment
     env = gym.make(env_name)
     env.seed(seed)
@@ -23,7 +23,7 @@ def visualize_it(env_name,model_file,pause_dur=0.1,seed=0,shift=0,argmax=False):
         env.reset()
     # Define agent
     # model_dir = utils.get_model_dir(model_file)
-    agent = utils.Agent(env_name, env.observation_space, model_file, argmax)
+    agent = Agent(env_name, env.observation_space, model_file, argmax)
     # Run the agent
     done = True
     while True:

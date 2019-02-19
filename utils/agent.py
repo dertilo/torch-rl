@@ -2,6 +2,8 @@ import torch
 
 import utils
 from model import ACModel
+from utils.format import get_obss_preprocessor
+from utils.save import load_model
 
 
 class Agent:
@@ -10,8 +12,8 @@ class Agent:
     - to analyze the feedback (i.e. reward and done state) of its action."""
 
     def __init__(self, env_id, obs_space, model_dir, argmax=False, num_envs=1):
-        _, self.preprocess_obss = utils.get_obss_preprocessor(env_id, obs_space, model_dir)
-        self.acmodel:ACModel = utils.load_model(model_dir)
+        _, self.preprocess_obss = get_obss_preprocessor(env_id, obs_space, model_dir)
+        self.acmodel:ACModel = load_model(model_dir)
         self.argmax = argmax
         self.num_envs = num_envs
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
