@@ -14,8 +14,8 @@ import envs
 from torch_rl.algos.a2c import A2CAlgo
 from torch_rl.algos.ppo import PPOAlgo
 from torch_rl.utils.penv import ParallelEnv
-from utils.format import preprocess_images, get_obss_preprocessor
-from utils.general import set_seed, get_model_dir
+from utils.format import preprocess_images
+from utils.general import get_model_dir, set_seeds
 from utils.save import get_logger, get_csv_writer, save_model
 
 try:
@@ -81,6 +81,51 @@ parser.add_argument("--text", action="store_true", default=False,
 args = parser.parse_args()
 args.mem = args.recurrence > 1
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+class PreprocessWrapper(gym.Env):
+    def __init__(self,env:gym.Env):
+        self.env = env
+        self.observation_space = env.observation_space
+        self.action_space = env.action_space
+
+    def step(self, act):
+        actions = act.get('actions').cpu().numpy()
+        env_step = self.env.step(actions)
+        return self.process_env_step(env_step)
+
+    def process_env_step(self, env_step):
+        return {'reward': torch.tensor(env_step.get('reward')),
+                'done': torch.tensor(env_step.get('done'), dtype=torch.float),
+                'image': preprocess_images(env_step.get('observation'), device=device)}
+
+    def reset(self):
+        env_step = self.env.reset()
+        return self.process_env_step(env_step)
+
+    def render(self, mode='human'):
+        return self.env.render(mode)
+
+class DictEnvWrapper(gym.Env):
+    def __init__(self,env:gym.Env):
+        self.env = env
+        self.observation_space = env.observation_space
+        self.action_space = env.action_space
+
+    def step(self, action):
+        obs,reward,done,_ = self.env.step(action)
+        if done:
+            obs = self.env.reset()
+        return {'observation':obs['image'],'reward':reward,'done':done}
+
+    def reset(self):
+        obs = self.env.reset()
+        return {'observation':obs['image'],'reward':0,'done':False}
+
+    def render(self, mode='human'):
+        return self.env.render(mode)
+
+
 # Define run dir
 
 suffix = datetime.datetime.now().strftime("%y-%m-%d-%H-%M-%S")
@@ -103,14 +148,20 @@ logger.info("{}\n".format(args))
 
 # Set seed for all randomness sources
 
-set_seed(args.seed)
+set_seeds(args.seed)
+
+
+def build_env_supplier(i):
+    def env_supplier():
+        env = gym.make(args.env)
+        env.seed(args.seed + 10000 * i)
+        env = DictEnvWrapper(env)
+        return env
+    return env_supplier
+
 
 # Generate environments
-envs = ParallelEnv.build(args.env,args.procs,args.seed)
-# Define obss preprocessor
-
-obs_space, preprocess_obss = get_obss_preprocessor(args.env, envs.observation_space, model_dir)
-
+envs = PreprocessWrapper(ParallelEnv.build(build_env_supplier, args.procs))
 # Load training status
 
 # try:
@@ -124,7 +175,7 @@ obs_space, preprocess_obss = get_obss_preprocessor(args.env, envs.observation_sp
 #     logger.info("Model successfully loaded\n")
 # except OSError:
 
-acmodel = ACModel(obs_space, envs.action_space, args.mem, args.text)
+acmodel = ACModel(envs.observation_space, envs.action_space, args.mem, args.text)
 logger.info("Model successfully created\n")
 logger.info("{}\n".format(acmodel))
 
@@ -137,22 +188,22 @@ logger.info("CUDA available: {}\n".format(torch.cuda.is_available()))
 if args.algo == "a2c":
     algo = A2CAlgo(envs, acmodel, args.num_rollout_steps, args.discount, args.lr, args.gae_lambda,
                             args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
-                            args.optim_alpha, args.optim_eps, preprocess_obss)
+                            args.optim_alpha, args.optim_eps)
 elif args.algo == "ppo":
     algo = PPOAlgo(envs, acmodel, args.num_rollout_steps, args.discount, args.lr, args.gae_lambda,
                             args.entropy_coef, args.value_loss_coef, args.max_grad_norm, args.recurrence,
-                            args.optim_eps, args.clip_eps, args.epochs, args.batch_size, preprocess_obss)
+                            args.optim_eps, args.clip_eps, args.epochs, args.batch_size)
 else:
     raise ValueError("Incorrect algorithm name: {}".format(args.algo))
 
 
 train_model(args.frames,algo,logger,csv_writer,csv_file)
 
-preprocess_obss.vocab.save()
-if torch.cuda.is_available():
-    acmodel.cpu()
-save_model(acmodel, model_dir)
-if torch.cuda.is_available():
-    acmodel.cuda()
+# if torch.cuda.is_available():
+#     acmodel.cpu()
+# save_model(acmodel, model_dir)
+# if torch.cuda.is_available():
+#     acmodel.cuda()
 
-visualize_it(env_name,model_dir)
+
+# visualize_it(gym.make(args.env),model_dir)

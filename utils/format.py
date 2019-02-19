@@ -3,41 +3,10 @@ import json
 import numpy
 import re
 import torch
-import torch_rl
 import gym
-
-import utils
-from torch_rl.utils.dictlist import DictList
 from utils.general import create_folders_if_necessary
 from utils.save import get_vocab_path
 
-
-def get_obss_preprocessor(env_id, obs_space, model_dir):#TODO: this one must go!
-    # Check if it is a MiniGrid environment
-    if re.match("MiniGrid-.*", env_id):
-        obs_space = {"image": obs_space.spaces['image'].shape, "text": 100}
-
-        vocab = Vocabulary(model_dir, obs_space["text"])
-        def preprocess_obss(obss, device=None):
-            return DictList({
-                "image": preprocess_images([obs["image"] for obs in obss], device=device),
-                "text": preprocess_texts([obs["mission"] for obs in obss], vocab, device=device)
-            })
-        preprocess_obss.vocab = vocab
-
-    # Check if the obs_space is of type Box([X, Y, 3])
-    elif isinstance(obs_space, gym.spaces.Box) and len(obs_space.shape) == 3 and obs_space.shape[2] == 3:
-        obs_space = {"image": obs_space.shape}
-
-        def preprocess_obss(obss, device=None):
-            return DictList({
-                "image": preprocess_images(obss, device=device)
-            })
-
-    else:
-        raise ValueError("Unknown observation space: " + str(obs_space))
-
-    return obs_space, preprocess_obss
 
 def preprocess_images(images, device=None):
     # Bug of Pytorch: very slow if not first converted to numpy array

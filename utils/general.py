@@ -17,7 +17,7 @@ def create_folders_if_necessary(path):
     if not os.path.isdir(dirname):
         os.makedirs(dirname)
 
-def set_seed(seed):
+def set_seeds(seed):
     random.seed(seed)
     numpy.random.seed(seed)
     torch.manual_seed(seed)

@@ -6,14 +6,13 @@ import logging
 import sys
 
 import utils
-from model import ACModel
 from utils.general import create_folders_if_necessary
 
 
 def get_model_path(model_dir):
     return os.path.join(model_dir, "model.pt")
 
-def load_model(model_dir)->ACModel:
+def load_model(model_dir):
     path = get_model_path(model_dir)
     model = torch.load(path)
     model.eval()

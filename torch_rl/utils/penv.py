@@ -9,13 +9,9 @@ def worker(conn, env_supplier):
     while True:
         cmd, data = conn.recv()
         if cmd == "step":
-            obs, reward, done, info = env.step(data)
-            if done:
-                obs = env.reset()
-            conn.send((obs, reward, done, info))
+            conn.send(env.step(data))
         elif cmd == "reset":
-            obs = env.reset()
-            conn.send(obs)
+            conn.send(env.reset())
         elif cmd == 'get_spaces':
             conn.send((env.observation_space, env.action_space))
         else:
@@ -31,7 +27,7 @@ class ParallelEnv(gym.Env):
         for env_sup in env_suppliers:
             local, remote = Pipe()
             self.locals.append(local)
-            p = Process(target=worker, args=(remote, env_sup)) #TODO: pickling env to get it into worker-process is not acceptable!
+            p = Process(target=worker, args=(remote, env_sup))
             p.daemon = True
             p.start()
             remote.close()
@@ -42,27 +38,21 @@ class ParallelEnv(gym.Env):
     def reset(self):
         for local in self.locals:
             local.send(("reset", None))
-        return [local.recv() for local in self.locals]
+        LD = [local.recv() for local in self.locals]
+        DL = {k: [dic[k] for dic in LD] for k in LD[0]}
+        return DL
 
     def step(self, actions):
         for local, action in zip(self.locals, actions):
             local.send(("step", action))
-        obs, rewards,dones,infos = zip(*[local.recv() for local in self.locals])
-        rewards = torch.tensor(rewards)
-        dones = torch.tensor(dones, dtype=torch.float)
-        return obs,rewards,dones, infos
+
+        LD = [local.recv() for local in self.locals]
+        DL = {k: [dic[k] for dic in LD] for k in LD[0]}
+        return DL
 
     def render(self):
         raise NotImplementedError
 
     @staticmethod
-    def build(env_name,num_envs,seed):
-        def build_env_supplier(i):
-            def env_supplier():
-                env = gym.make(env_name)
-                env.seed(seed + 10000 * i)
-                return env
-
-            return env_supplier
-
+    def build(build_env_supplier,num_envs):
         return ParallelEnv([build_env_supplier(i) for i in range(num_envs)])

@@ -10,11 +10,11 @@ class A2CAlgo(BaseAlgo):
 
     def __init__(self, envs, acmodel:ACModel, num_frames_per_proc=None, discount=0.99, lr=7e-4, gae_lambda=0.95,
                  entropy_coef=0.01, value_loss_coef=0.5, max_grad_norm=0.5, num_recurr_steps=4,
-                 rmsprop_alpha=0.99, rmsprop_eps=1e-5, preprocess_obss=None, reshape_reward=None):
+                 rmsprop_alpha=0.99, rmsprop_eps=1e-5, reshape_reward=None):
         num_frames_per_proc = num_frames_per_proc or 8
 
         super().__init__(envs, acmodel, num_frames_per_proc, discount, lr, gae_lambda, entropy_coef,
-                         value_loss_coef, max_grad_norm, num_recurr_steps, preprocess_obss, reshape_reward)
+                         value_loss_coef, max_grad_norm, num_recurr_steps, reshape_reward)
 
         self.optimizer = torch.optim.RMSprop(self.acmodel.parameters(), lr,
                                              alpha=rmsprop_alpha, eps=rmsprop_eps)
@@ -24,32 +24,21 @@ class A2CAlgo(BaseAlgo):
 
         exps, logs = self.collect_experiences()
 
-        # Compute starting indexes
-
-        inds = self._get_starting_indexes()
-
-        # Initialize update values
-
         update_entropy = 0
         update_value = 0
         update_policy_loss = 0
         update_value_loss = 0
         update_loss = 0
 
-        # Initialize memory
-
-        memory = exps.memory[inds]
-
+        inds = numpy.arange(0, self.num_frames, self.num_recurr_steps)
+        self.acmodel.set_hidden_state(exps[inds].agent_steps)
         for i in range(self.num_recurr_steps):
-            # Create a sub-batch of experience
-
             sb = exps[inds + i]
-
-            dist, value, memory = self.acmodel(sb.obs, memory * sb.mask)
+            dist, value, _ = self.acmodel(sb.env_steps)
 
             entropy = dist.entropy().mean()
 
-            policy_loss = -(dist.log_prob(sb.action) * sb.advantage).mean()
+            policy_loss = -(dist.log_prob(sb.agent_steps.actions) * sb.advantages).mean()
 
             value_loss = (value - sb.returnn).pow(2).mean()
 
