@@ -4,6 +4,8 @@ import argparse
 import gym
 import time
 import datetime
+
+import numpy
 import torch
 import torch_rl
 import sys
@@ -199,11 +201,26 @@ else:
 
 train_model(args.frames,algo,logger,csv_writer,csv_file)
 
-# if torch.cuda.is_available():
-#     acmodel.cpu()
-# save_model(acmodel, model_dir)
-# if torch.cuda.is_available():
-#     acmodel.cuda()
+if torch.cuda.is_available():
+    acmodel.cpu()
+save_model(acmodel, model_dir)
+if torch.cuda.is_available():
+    acmodel.cuda()
 
+class SingleEnvWrapper(gym.Env):
+    def __init__(self,env:gym.Env):
+        self.env = env
+        self.observation_space = env.observation_space
+        self.action_space = env.action_space
 
-# visualize_it(gym.make(args.env),model_dir)
+    def step(self, action):
+        return {k:[v] for k,v in self.env.step(action).items()}
+
+    def reset(self):
+        return {k:[v] for k,v in self.env.reset().items()}
+
+    def render(self, mode='human'):
+        return self.env.render(mode)
+
+env = PreprocessWrapper(SingleEnvWrapper(DictEnvWrapper(gym.make(args.env))))
+visualize_it(env,model_dir)

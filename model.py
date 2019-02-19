@@ -127,13 +127,17 @@ class ACModel(nn.Module):
 
         return dist, value, memory
 
-    def step(self,observation:Dict[str,torch.Tensor],hidden_state=None)->Dict[str,Any]:
+    def step(self,observation:Dict[str,torch.Tensor],hidden_state=None,argmax=False)->Dict[str,Any]:
         dist, values, self.hidden_state = self(observation, hidden_state if hidden_state is not None else self.hidden_state)
 
-        action = dist.sample()
-        logprob = dist.log_prob(action)
+        if argmax:
+            actions = dist.probs.max(1, keepdim=True)[1]
+        else:
+            actions = dist.sample()
 
-        return {'actions':action,'values':values,'logprobs':logprob,'hidden_states':self.hidden_state}
+        logprob = dist.log_prob(actions)
+
+        return {'actions':actions,'values':values,'logprobs':logprob,'hidden_states':self.hidden_state}
 
     def set_hidden_state(self,agent_step):
         self.hidden_state = agent_step.get('hidden_states')
