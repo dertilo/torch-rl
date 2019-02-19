@@ -68,7 +68,7 @@ class SnakeEnv(MiniGridEnv):
         self.mission = "get to the green goal square"
 
     def reset(self):
-        return self.perceive(super().reset())
+        return super().reset()
 
     def step(self, action):
         self.step_count += 1
@@ -122,12 +122,8 @@ class SnakeEnv(MiniGridEnv):
 
         obs = self.gen_obs()
 
-        obs = self.perceive(obs)
-
         return obs, reward, done, {}
 
-    def perceive(self, obs):
-        return obs
 
 
 register(

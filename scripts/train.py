@@ -33,8 +33,8 @@ from model import ACModel
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument("--algo", default='a2c',
                     help="algorithm to use: a2c | ppo (REQUIRED)")
-# env_name = 'MiniGrid-Snake-v0'
-env_name = 'MiniGrid-Empty-8x8-v0'
+env_name = 'MiniGrid-Snake-v0'
+# env_name = 'MiniGrid-Empty-8x8-v0'
 model_name = 'mlp-128-64'
 parser.add_argument("--env", default=env_name,
                     help="name of the environment to train on (REQUIRED)")
@@ -44,7 +44,7 @@ parser.add_argument("--seed", type=int, default=1,
                     help="random seed (default: 1)")
 parser.add_argument("--procs", type=int, default=16,
                     help="number of processes (default: 16)")
-parser.add_argument("--frames", type=int, default=80*300,
+parser.add_argument("--frames", type=int, default=80*600,
                     help="number of frames of training (default: 10e7)")
 parser.add_argument("--log-interval", type=int, default=1,
                     help="number of updates between two logs (default: 1)")
