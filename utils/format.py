@@ -7,7 +7,9 @@ import torch_rl
 import gym
 
 import utils
-from torch_rl.utils import DictList
+from torch_rl.utils.dictlist import DictList
+from utils.general import create_folders_if_necessary
+from utils.save import get_vocab_path
 
 
 def get_obss_preprocessor(env_id, obs_space, model_dir):#TODO: this one must go!
@@ -64,7 +66,7 @@ class Vocabulary:
     It can be saved in a `vocab.json` file."""
 
     def __init__(self, model_dir, max_size):
-        self.path = utils.get_vocab_path(model_dir)
+        self.path = get_vocab_path(model_dir)
         self.max_size = max_size
         self.vocab = {}
         if os.path.exists(self.path):
@@ -78,5 +80,5 @@ class Vocabulary:
         return self.vocab[token]
 
     def save(self):
-        utils.create_folders_if_necessary(self.path)
+        create_folders_if_necessary(self.path)
         json.dump(self.vocab, open(self.path, "w"))

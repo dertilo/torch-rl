@@ -1,9 +1,7 @@
 import time
 import utils
-
-import torch
-
 from torch_rl.algos.base import BaseAlgo
+from utils.general import calc_stats
 
 
 def train_model(num_steps_to_train, algo:BaseAlgo, logger, csv_writer, csv_file):
@@ -24,8 +22,8 @@ def train_model(num_steps_to_train, algo:BaseAlgo, logger, csv_writer, csv_file)
 
         fps = logs["num_frames"] / (update_end_time - update_start_time)
         duration = int(time.time() - total_start_time)
-        return_per_episode = utils.synthesize(logs["return_per_episode"])
-        num_frames_per_episode = utils.synthesize(logs["num_frames_per_episode"])
+        return_per_episode = calc_stats(logs["return_per_episode"])
+        num_frames_per_episode = calc_stats(logs["num_frames_per_episode"])
 
         log_stuff(csv_file, csv_writer, duration, fps, logger, logs, num_frames_per_episode, num_steps,
                   return_per_episode, update)

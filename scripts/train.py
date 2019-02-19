@@ -10,9 +10,13 @@ import sys
 
 from scripts.train_methods import train_model
 from scripts.visualize import visualize_it
-from torch_rl.algos import A2CAlgo, PPOAlgo
-from torch_rl.utils import ParallelEnv
 import envs
+from torch_rl.algos.a2c import A2CAlgo
+from torch_rl.algos.ppo import PPOAlgo
+from torch_rl.utils.penv import ParallelEnv
+from utils.format import preprocess_images, get_obss_preprocessor
+from utils.general import set_seed, get_model_dir
+from utils.save import get_logger, get_csv_writer, save_model
 
 try:
     import gym_minigrid
@@ -38,7 +42,7 @@ parser.add_argument("--seed", type=int, default=1,
                     help="random seed (default: 1)")
 parser.add_argument("--procs", type=int, default=16,
                     help="number of processes (default: 16)")
-parser.add_argument("--frames", type=int, default=80*100,
+parser.add_argument("--frames", type=int, default=80*300,
                     help="number of frames of training (default: 10e7)")
 parser.add_argument("--log-interval", type=int, default=1,
                     help="number of updates between two logs (default: 1)")
@@ -82,12 +86,12 @@ args.mem = args.recurrence > 1
 suffix = datetime.datetime.now().strftime("%y-%m-%d-%H-%M-%S")
 default_model_name = "{}_{}_seed{}_{}".format(args.env, args.algo, args.seed, suffix)
 model_name = args.model or default_model_name
-model_dir = utils.get_model_dir(model_name)
+model_dir = get_model_dir(model_name)
 
 # Define logger, CSV writer and Tensorboard writer
 
-logger = utils.get_logger(model_dir)
-csv_file, csv_writer = utils.get_csv_writer(model_dir)
+logger = get_logger(model_dir)
+csv_file, csv_writer = get_csv_writer(model_dir)
 if args.tb:
     from tensorboardX import SummaryWriter
     tb_writer = SummaryWriter(model_dir)
@@ -99,13 +103,13 @@ logger.info("{}\n".format(args))
 
 # Set seed for all randomness sources
 
-utils.seed(args.seed)
+set_seed(args.seed)
 
 # Generate environments
 envs = ParallelEnv.build(args.env,args.procs,args.seed)
 # Define obss preprocessor
 
-obs_space, preprocess_obss = utils.get_obss_preprocessor(args.env, envs.observation_space, model_dir)
+obs_space, preprocess_obss = get_obss_preprocessor(args.env, envs.observation_space, model_dir)
 
 # Load training status
 
@@ -147,7 +151,7 @@ train_model(args.frames,algo,logger,csv_writer,csv_file)
 preprocess_obss.vocab.save()
 if torch.cuda.is_available():
     acmodel.cpu()
-utils.save_model(acmodel, model_dir)
+save_model(acmodel, model_dir)
 if torch.cuda.is_available():
     acmodel.cuda()
 

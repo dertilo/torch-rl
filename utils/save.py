@@ -7,6 +7,7 @@ import sys
 
 import utils
 from model import ACModel
+from utils.general import create_folders_if_necessary
 
 
 def get_model_path(model_dir):
@@ -20,7 +21,7 @@ def load_model(model_dir)->ACModel:
 
 def save_model(model, model_dir):
     path = get_model_path(model_dir)
-    utils.create_folders_if_necessary(path)
+    create_folders_if_necessary(path)
     torch.save(model, path)
 
 def get_log_path(model_dir):
@@ -28,7 +29,7 @@ def get_log_path(model_dir):
 
 def get_logger(model_dir):
     path = get_log_path(model_dir)
-    utils.create_folders_if_necessary(path)
+    create_folders_if_necessary(path)
 
     logging.basicConfig(
         level=logging.INFO,
@@ -49,6 +50,6 @@ def get_csv_path(model_dir):
 
 def get_csv_writer(model_dir):
     csv_path = get_csv_path(model_dir)
-    utils.create_folders_if_necessary(csv_path)
+    create_folders_if_necessary(csv_path)
     csv_file = open(csv_path, "a")
     return csv_file, csv.writer(csv_file)
