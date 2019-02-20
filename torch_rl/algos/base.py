@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import gym
 import torch
 
-from model import ACModel
+from agent_models import ACModel
 from torch_rl.utils.dictlist import DictList
 
 def flatten_arrays_in_dict(d):
@@ -12,6 +12,16 @@ def flatten_arrays_in_dict(d):
 
 def flatten_array(v):
     return v.transpose(0, 1).reshape(v.shape[0] * v.shape[1], *v.shape[2:])
+
+def generalized_advantage_estimation(rewards,values,dones,num_rollout_steps,discount,gae_lambda):
+    assert values.shape[0] == 1 + num_rollout_steps
+    advantage_buffer = torch.zeros(rewards.shape[0]-1,rewards.shape[1])
+    next_advantage = 0
+    for i in reversed(range(num_rollout_steps)):
+        bellman_delta = rewards[i+1] + discount * values[i + 1] * (1 - dones[i+1]) - values[i]
+        advantage_buffer[i] = bellman_delta + discount * gae_lambda * next_advantage * (1 - dones[i+1])
+        next_advantage = advantage_buffer[i]
+    return advantage_buffer
 
 
 class BaseAlgo(ABC):
@@ -64,10 +74,12 @@ class BaseAlgo(ABC):
     def collect_experiences(self):
         self.env_steps,self.agent_steps = self.gather_exp_via_rollout(self.env_steps,self.agent_steps)
 
-        advantages = self.generalized_advantage_estimation(
-            rewards=self.env_steps[1:].get('reward'),
+        advantages = generalized_advantage_estimation(
+            rewards=self.env_steps.get('reward'),
             values=self.agent_steps.get('values'),
-            dones=self.env_steps[1:].get('done'))
+            dones=self.env_steps.get('done'),
+            num_rollout_steps=self.num_rollout_steps,discount=self.discount,gae_lambda=self.gae_lambda
+        )
 
         exp = DictList(**{
             'env_steps':DictList(**flatten_arrays_in_dict(self.env_steps[:-1])),
@@ -115,20 +127,6 @@ class BaseAlgo(ABC):
         self.rewards_sum *= 1 - done
         self.num_steps_sum *= 1 - done
 
-    def generalized_advantage_estimation(self,rewards,values,dones):
-        def calc_advantage(dones, rewards, values, num_rollout_steps, discount, gae_lambda):
-            advantage_buffer = torch.zeros_like(rewards)
-            next_advantage = 0
-            for i in reversed(range(num_rollout_steps)):
-                bellman_delta = rewards[i] + discount * values[i + 1] * (1 - dones[i]) - values[i]
-                advantage_buffer[i] = bellman_delta + discount * gae_lambda * next_advantage * (1 - dones[i])
-                next_advantage = advantage_buffer[i]
-            return advantage_buffer
-        # --------------------------------------------------------
-        assert values.shape[0]==1+self.num_rollout_steps
-
-        advantage_buffer = calc_advantage(dones, rewards, values,self.num_rollout_steps,self.discount,self.gae_lambda)
-        return advantage_buffer
 
 
     @abstractmethod

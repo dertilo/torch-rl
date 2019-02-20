@@ -10,6 +10,7 @@ import torch
 import torch_rl
 import sys
 
+from agent_models import ACModel
 from scripts.train_methods import train_model
 from scripts.visualize import visualize_it
 import envs
@@ -26,7 +27,6 @@ except ImportError:
     raise Exception('gym_minigrid must be in PYTHONPATH!')
 
 import utils
-from model import ACModel
 
 # Parse arguments
 

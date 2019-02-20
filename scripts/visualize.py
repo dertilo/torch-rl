@@ -4,7 +4,7 @@ import argparse
 import gym
 import time
 
-from model import ACModel
+from agent_models import ACModel
 from utils.general import set_seeds
 from utils.save import load_model
 
