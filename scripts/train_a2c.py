@@ -14,7 +14,6 @@ from agent_models import ACModel
 from scripts.visualize import visualize_it
 import envs
 from torch_rl.algos.a2c import A2CAlgo
-from torch_rl.algos.base import BaseAlgo
 from torch_rl.utils.penv import ParallelEnv
 from utils.format import preprocess_images
 from utils.general import get_model_dir, set_seeds, calc_stats
@@ -26,7 +25,7 @@ except ImportError:
     raise Exception('gym_minigrid must be in PYTHONPATH!')
 
 
-def train_model(num_batches, algo:BaseAlgo, logger, csv_writer, csv_file):
+def train_model(num_batches, algo, logger, csv_writer, csv_file):
 
     num_steps = 0
     total_start_time = time.time()
@@ -158,7 +157,7 @@ if torch.cuda.is_available():
     acmodel.cuda()
 logger.info("CUDA available: {}\n".format(torch.cuda.is_available()))
 
-algo = A2CAlgo(envs, acmodel, args.num_rollout_steps, discount=0.99, lr=7e-4, gae_lambda=0.95,
+algo = A2CAlgo(envs, acmodel,num_rollout_steps=args.num_rollout_steps, discount=0.99, lr=7e-4, gae_lambda=0.95,
                         entropy_coef=0.01, value_loss_coef=0.5, max_grad_norm=0.5, num_recurr_steps=1)
 
 train_model(args.num_batches,algo,logger,csv_writer,csv_file)
