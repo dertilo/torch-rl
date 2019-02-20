@@ -38,10 +38,9 @@ def logging_stuff(logged:Dict, done, reward,num_envs,device):
 
 
 class BaseAlgo(ABC):
-    """The base class for RL algorithms."""
 
     def __init__(self, env:gym.Env, acmodel:ACModel, num_rollout_steps, discount, lr, gae_lambda, entropy_coef,
-                 value_loss_coef, max_grad_norm, num_recurr_steps, reshape_reward):
+                 value_loss_coef, max_grad_norm, num_recurr_steps):
 
         self.env = env
         self.acmodel = acmodel
@@ -78,7 +77,7 @@ class BaseAlgo(ABC):
             'log_done_counter':0,
             'log_episode_rewards':[],
             'log_num_steps':[]
-                       }
+        }
 
     def collect_experiences(self):
         self.env_steps,self.agent_steps = self.gather_exp_via_rollout(self.env_steps,self.agent_steps)
