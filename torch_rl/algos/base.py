@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Dict
 
 import gym
 import torch
@@ -23,6 +24,18 @@ def generalized_advantage_estimation(rewards,values,dones,num_rollout_steps,disc
         next_advantage = advantage_buffer[i]
     return advantage_buffer
 
+def logging_stuff(logged:Dict, done, reward,num_envs,device):
+    logged['rewards_sum'] += torch.tensor(reward, device=device, dtype=torch.float)
+    logged['num_steps_sum'] += torch.ones(num_envs, device=device)
+    for i, done_ in enumerate(done):
+        if done_:
+            logged['log_done_counter'] += 1
+            logged['log_episode_rewards'].append(logged['rewards_sum'][i].item())
+            logged['log_num_steps'].append(logged['num_steps_sum'][i].item())
+    logged['rewards_sum'] *= 1 - done
+    logged['num_steps_sum'] *= 1 - done
+    return logged
+
 
 class BaseAlgo(ABC):
     """The base class for RL algorithms."""
@@ -41,7 +54,6 @@ class BaseAlgo(ABC):
         self.value_loss_coef = value_loss_coef
         self.max_grad_norm = max_grad_norm
         self.num_recurr_steps = num_recurr_steps
-        self.reshape_reward = reshape_reward
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -60,16 +72,13 @@ class BaseAlgo(ABC):
 
         self.num_frames = self.num_rollout_steps * self.num_envs
 
-        # Initialize log values
-        self.last_dones = torch.zeros(self.num_envs, device=self.device)
-        self.rewards_sum = torch.zeros(self.num_envs, device=self.device) # TODO: wrap to be logged data in dict or something!
-        self.log_episode_reshaped_return = torch.zeros(self.num_envs, device=self.device)
-        self.num_steps_sum = torch.zeros(self.num_envs, device=self.device)
-
-        self.log_done_counter = 0
-        self.log_episode_rewards = []
-        self.log_num_steps = []
-
+        self.logged = {
+            'rewards_sum':torch.zeros(self.num_envs, device=self.device),
+            'num_steps_sum':torch.zeros(self.num_envs, device=self.device),
+            'log_done_counter':0,
+            'log_episode_rewards':[],
+            'log_num_steps':[]
+                       }
 
     def collect_experiences(self):
         self.env_steps,self.agent_steps = self.gather_exp_via_rollout(self.env_steps,self.agent_steps)
@@ -88,44 +97,34 @@ class BaseAlgo(ABC):
             'returnn':flatten_array(self.agent_steps[:-1].get('values')+advantages)
                })
 
-        keep = max(self.log_done_counter, self.num_envs)# in one rollout there can be multiple dones!!
+        keep = max(self.logged['log_done_counter'], self.num_envs)# in one rollout there can be multiple dones!!
 
         log = {
-            "return_per_episode": self.log_episode_rewards[-keep:],
-            "num_frames_per_episode": self.log_num_steps[-keep:],
+            "return_per_episode": self.logged['log_episode_rewards'][-keep:],
+            "num_frames_per_episode": self.logged['log_num_steps'][-keep:],
             "num_frames": self.num_frames
         }
 
-        self.log_done_counter = 0
-        self.log_episode_rewards = self.log_episode_rewards[-self.num_envs:]
-        self.log_num_steps = self.log_num_steps[-self.num_envs:]
+        self.logged['log_done_counter'] = 0
+        self.logged['log_episode_rewards'] = self.logged['log_episode_rewards'][-self.num_envs:]
+        self.logged['log_num_steps'] = self.logged['log_num_steps'][-self.num_envs:]
 
         return exp, log
 
     def gather_exp_via_rollout(self, env_steps,agent_steps):
         env_steps[0] = env_steps[-1]
         agent_steps[0] = agent_steps[-1]
-        self.acmodel.set_hidden_state(self.agent_steps[0])
+        self.acmodel.set_hidden_state(agent_steps[0])
 
         for i in range(self.num_rollout_steps):
             env_steps[i+1] = self.env.step(agent_steps[i])
             with torch.no_grad():
                 agent_steps[i+1] = self.acmodel.step(env_steps[i+1])
 
-            self.logging_stuff(env_steps.get('done')[i+1], env_steps.get('reward')[i+1])
+            logging_stuff(self.logged,env_steps.get('done')[i+1], env_steps.get('reward')[i+1],self.num_envs,self.device)
 
         return env_steps,agent_steps
 
-    def logging_stuff(self, done, reward):
-        self.rewards_sum += torch.tensor(reward, device=self.device, dtype=torch.float)
-        self.num_steps_sum += torch.ones(self.num_envs, device=self.device)
-        for i, done_ in enumerate(done):
-            if done_:
-                self.log_done_counter += 1
-                self.log_episode_rewards.append(self.rewards_sum[i].item())
-                self.log_num_steps.append(self.num_steps_sum[i].item())
-        self.rewards_sum *= 1 - done
-        self.num_steps_sum *= 1 - done
 
 
 
