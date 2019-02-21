@@ -4,15 +4,9 @@ import numpy
 import torch
 
 from agent_models import ACModel
+from torch_rl.algos.train_methods import flatten_parallel_rollout, flatten_array
 from torch_rl.utils.dictlist import DictList
 
-
-def flatten_arrays_in_dict(d):
-    return {k: flatten_array(v) for k, v in d.items()}
-
-
-def flatten_array(v):
-    return v.transpose(0, 1).reshape(v.shape[0] * v.shape[1], *v.shape[2:])
 
 def generalized_advantage_estimation(rewards,values,dones,num_rollout_steps,discount,gae_lambda):
     assert values.shape[0] == 1 + num_rollout_steps
@@ -38,7 +32,6 @@ def logging_stuff(logged:Dict, done, reward,num_envs,device):
 
 
 class A2CAlgo(object):
-    """The class for the Advantage Actor-Critic algorithm."""
 
     def __init__(self, env, acmodel:ACModel, num_rollout_steps=None, discount=0.99, lr=7e-4, gae_lambda=0.95,
                  entropy_coef=0.01, value_loss_coef=0.5, max_grad_norm=0.5, num_recurr_steps=4,
@@ -46,7 +39,6 @@ class A2CAlgo(object):
 
         self.env = env
         self.acmodel = acmodel
-        self.acmodel.train()
         self.num_rollout_steps = num_rollout_steps
         self.discount = discount
         self.lr = lr
@@ -85,15 +77,16 @@ class A2CAlgo(object):
                                              alpha=rmsprop_alpha, eps=rmsprop_eps)
 
     def update_parameters(self):
-        # Collect experiences
-
-        exps, logs = self.collect_experiences()
+        with torch.no_grad():
+            exps, logs = self.collect_experiences()
 
         update_entropy = 0
         update_value = 0
         update_policy_loss = 0
         update_value_loss = 0
         update_loss = 0
+
+        self.acmodel.train()
 
         inds = numpy.arange(0, self.num_frames, self.num_recurr_steps)
         self.acmodel.set_hidden_state(exps[inds].agent_steps)
@@ -154,10 +147,10 @@ class A2CAlgo(object):
         )
 
         exp = DictList(**{
-            'env_steps':DictList(**flatten_arrays_in_dict(self.env_steps[:-1])),
-            'agent_steps':DictList(**flatten_arrays_in_dict(self.agent_steps[:-1])),
+            'env_steps':DictList(**flatten_parallel_rollout(self.env_steps[:-1])),
+            'agent_steps':DictList(**flatten_parallel_rollout(self.agent_steps[:-1])),
             'advantages': flatten_array(advantages),
-            'returnn':flatten_array(self.agent_steps[:-1].get('values')+advantages)
+            'returnn': flatten_array(self.agent_steps[:-1].get('values') + advantages)
                })
 
         keep = max(self.logged['log_done_counter'], self.num_envs)# in one rollout there can be multiple dones!!
@@ -181,8 +174,7 @@ class A2CAlgo(object):
 
         for i in range(self.num_rollout_steps):
             env_steps[i+1] = self.env.step(agent_steps[i])
-            with torch.no_grad():
-                agent_steps[i+1] = self.acmodel.step(env_steps[i+1])
+            agent_steps[i+1] = self.acmodel.step(env_steps[i+1])
 
             logging_stuff(self.logged,env_steps.get('done')[i+1], env_steps.get('reward')[i+1],self.num_envs,self.device)
 
