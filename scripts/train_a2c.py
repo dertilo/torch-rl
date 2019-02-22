@@ -4,7 +4,7 @@ import time
 import gym
 import torch
 
-from envs import build_SnakeEnv, SnakeAgent
+from envs import build_SnakeEnv, SnakeA2CAgent
 from scripts.visualize import visualize_it
 from torch_rl.algos.a2c import A2CAlgo
 from torch_rl.algos.train_methods import CsvLogger
@@ -38,7 +38,7 @@ csv_file, csv_writer = get_csv_writer(model_dir)
 set_seeds(args.seed)
 
 envs = build_SnakeEnv(num_envs=16, use_multiprocessing=True)
-agent = SnakeAgent(envs.observation_space, envs.action_space)
+agent = SnakeA2CAgent(envs.observation_space, envs.action_space)
 logger.info("Model successfully created\n")
 logger.info("{}\n".format(agent))
 

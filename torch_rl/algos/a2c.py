@@ -110,9 +110,9 @@ class A2CAlgo(object):
         def get_metrics_to_log(log,last_n_steps):
             keep = min(len(log['log_episode_rewards']), last_n_steps)
             metrics = {
-                "dones":log['log_done_counter'],
+                "episodes":log['log_done_counter'],
                 "rewards": calc_stats(log['log_episode_rewards'][-keep:])['mean'],
-                "step": calc_stats(log['log_num_steps'][-keep:])['mean'],
+                "episode-length": calc_stats(log['log_num_steps'][-keep:])['median'],
             }
             return metrics
 

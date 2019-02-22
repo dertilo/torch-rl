@@ -11,7 +11,7 @@ from gym import spaces
 from gym_minigrid.minigrid import MiniGridEnv, Goal, Lava, Grid
 from torch.distributions.categorical import Categorical
 
-from agent_models import initialize_parameters, ACModel
+from agent_models import initialize_parameters, ACModel, QModel
 from scripts.visualize import visualize_it
 from torch_rl.utils.penv import SingleEnvWrapper, ParallelEnv
 from utils.format import preprocess_images
@@ -132,7 +132,7 @@ class SnakeEnv(MiniGridEnv):
 
         return obs, reward, done, {}
 
-class SnakeAgent(ACModel):
+class SnakeA2CAgent(ACModel):
     def __init__(self, obs_space, action_space, use_memory=False):
         super().__init__()
         self.hidden_state = None
@@ -242,6 +242,28 @@ class SnakeAgent(ACModel):
         _, hidden = self.text_rnn(self.word_embedding(text))
         return hidden[-1]
 
+class SnakeDQNAgent(QModel):
+    def __init__(self, obs_space, action_space):
+        super().__init__()
+        self.num_actions = action_space.n
+        image_shape = obs_space.spaces['image'].shape
+        self.q_nn = nn.Sequential(
+            *[
+                nn.Linear(image_shape[0]*image_shape[1], 128),
+                nn.ReLU(),
+                nn.Linear(128, 64),
+                nn.ReLU(),
+                nn.Linear(64, self.num_actions),
+             ]
+        )
+
+        self.apply(initialize_parameters)
+
+    def forward(self, observation):
+        image = observation.get('image')
+        x = image[:,:,:,0].view(image.size(0),-1)
+        return self.q_nn(x)
+
 class PreprocessWrapper(gym.Env):
     def __init__(self,env:gym.Env):
         self.env = env
@@ -270,9 +292,13 @@ class SnakeWrapper(gym.Env):
         self.env = SnakeEnv()
         self.observation_space = self.env.observation_space
         self.action_space = self.env.action_space
+        self.step_counter=0
 
     def step(self, action):
         obs,reward,done,_ = self.env.step(action)
+        self.step_counter+=1
+        if self.step_counter%200==0:
+            done = True
         if done:
             obs = self.env.reset()
         return {'observation':obs['image'],'reward':reward,'done':done}
@@ -316,7 +342,7 @@ def build_SnakeEnv(num_envs,use_multiprocessing):
 if __name__ == '__main__':
     env = build_SnakeEnv(num_envs=1,use_multiprocessing=False)
     x = env.reset()
-    agent = SnakeAgent(env.observation_space,env.action_space)
+    agent = SnakeA2CAgent(env.observation_space, env.action_space)
     visualize_it(env,agent)
 
 

@@ -2,7 +2,9 @@ import argparse
 
 import torch
 
+from envs import SnakeDQNAgent, build_SnakeEnv
 from envs.cartpole import CartPoleAgent, build_CartPoleEnv
+from scripts.visualize import visualize_it
 from torch_rl.algos.dqn import DQNAlgo
 from torch_rl.algos.train_methods import CsvLogger
 from utils.general import set_seeds
@@ -13,18 +15,12 @@ try:
 except ImportError:
     raise Exception('gym_minigrid must be in PYTHONPATH!')
 
-parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-parser.add_argument("--algo", default='a2c',
-                    help="algorithm to use: a2c | ppo (REQUIRED)")
-# env_name = 'MiniGrid-Snake-v0'
-# env_name = 'MiniGrid-Empty-8x8-v0'
 model_name = 'mlp-128-64'
 args = argparse.Namespace(**{
     'model_name':model_name,
-    'env_name':'CartPole-v1',
     'seed':1,
     'num_envs':1,
-    'num_batches':5000,
+    'num_batches':10000,
     'num_rollout_steps':1
 
 })
@@ -34,31 +30,27 @@ model_dir = 'storage/'+args.model_name
 
 logger = get_logger(model_dir)
 csv_file, csv_writer = get_csv_writer(model_dir)
-
 set_seeds(args.seed)
 
-envs = build_CartPoleEnv(num_envs=args.num_envs, use_multiprocessing=False)
+# envs = build_CartPoleEnv(num_envs=args.num_envs, use_multiprocessing=False)
+# q_model = CartPoleAgent(envs.observation_space, envs.action_space)
+# target_model = CartPoleAgent(envs.observation_space, envs.action_space)
 
+envs = build_SnakeEnv(num_envs=16, use_multiprocessing=True)
+agent = SnakeDQNAgent(envs.observation_space, envs.action_space)
+target_model = SnakeDQNAgent(envs.observation_space, envs.action_space)
 
-q_model = CartPoleAgent(envs.observation_space, envs.action_space)
-target_model = CartPoleAgent(envs.observation_space, envs.action_space)
 logger.info("Model successfully created\n")
-logger.info("{}\n".format(q_model))
+logger.info("{}\n".format(agent))
 
 if torch.cuda.is_available():
-    q_model.cuda()
+    agent.cuda()
 logger.info("CUDA available: {}\n".format(torch.cuda.is_available()))
 
-algo = DQNAlgo(envs, q_model,target_model, num_rollout_steps=args.num_rollout_steps,
-               lr=0.001,
-               target_model_update_interval=10)
+algo = DQNAlgo(envs, agent, target_model, num_rollout_steps=args.num_rollout_steps,
+               lr=0.0001,double_dpn=False,
+               target_model_update_interval=20)
 algo.train_model(args.num_batches,CsvLogger(csv_file,csv_writer,logger))
-#
-if torch.cuda.is_available():
-    q_model.cpu()
-save_model(q_model, model_dir)
-# if torch.cuda.is_available():
-#     acmodel.cuda()
-#
 # env = build_CartPoleEnv(num_envs=1, use_multiprocessing=False)
 # visualize_it(env,model_dir)
+visualize_it(build_SnakeEnv(num_envs=1, use_multiprocessing=False),agent)

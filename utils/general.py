@@ -28,6 +28,7 @@ def calc_stats(array):
     if len(array)>0:
         stats = {
             'mean': numpy.mean(array),
+            'median': numpy.median(array),
             'std': numpy.std(array),
             'min': numpy.amin(array),
             'max': numpy.amax(array)
@@ -35,6 +36,7 @@ def calc_stats(array):
     else:
         stats = {
             'mean': numpy.NaN,
+            'median': numpy.NaN,
             'std': numpy.NaN,
             'min': numpy.NaN,
             'max': numpy.NaN

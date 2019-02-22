@@ -34,16 +34,16 @@ class LinearAndConstantSchedule(object):
 
 class DQNAlgo(object):
 
-    def __init__(self, env:gym.Env, model:QModel,target_model, num_rollout_steps=None, target_model_update_interval=10,
+    def __init__(self, env:gym.Env, agent:QModel, target_model, num_rollout_steps=None, target_model_update_interval=10,
                  double_dpn=False,
                  discount=0.99, lr=7e-4,
                  rmsprop_alpha=0.99, rmsprop_eps=1e-5):
 
         self.double_dqn = double_dpn
         self.env = env
-        self.model = model
+        self.agent = agent
         self.target_model = target_model
-        self.target_model.load_state_dict(model.state_dict())
+        self.target_model.load_state_dict(agent.state_dict())
         self.target_model.eval()
         self.target_model_update_interval = target_model_update_interval
 
@@ -58,19 +58,19 @@ class DQNAlgo(object):
         initial_env_step = self.env.reset()
         self.num_envs = len(initial_env_step['reward'])
         with torch.no_grad():
-            initial_agent_step = self.model.step(initial_env_step)
+            initial_agent_step = self.agent.step(initial_env_step)
         initial_exp = DictList.build({'env':initial_env_step,'agent':initial_agent_step})
 
-        self.exp_memory = ExperienceMemory(200, initial_exp, step_logging_fun)
-
         self.batch_size = 32#self.num_rollout_steps * self.num_envs
+        self.exp_memory = ExperienceMemory(2000//self.num_envs, initial_exp, step_logging_fun)
 
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr)
+
+        self.optimizer = torch.optim.RMSprop(self.agent.parameters(), lr,alpha=rmsprop_alpha,eps=rmsprop_eps)
 
         with torch.no_grad():
-            model.eval()
+            agent.eval()
             def agent_step_fun(env_step):
-                return self.model.step(env_step,1.0)
+                return self.agent.step(env_step, 1.0)
             def env_step_fun(act):
                 # env.render()
                 return self.env.step(act)
@@ -87,29 +87,23 @@ class DQNAlgo(object):
 
     def train_batch(self):
         with torch.no_grad():
-            self.model.eval()
+            self.agent.eval()
             exps = self.collect_experiences()
-            print(Counter(self.exp_memory.buffer.agent.actions.squeeze().numpy().tolist()))
-            # if self.double_dqn:
-            #     target_q = target_evaluator.get('model:q_next')
-            #     model_q = evaluator.get('model:q_next')
-            #     # Select largest 'target' value based on action that 'model' selects
-            #     values = target_q.gather(1, model_q.argmax(dim=1, keepdim=True)).squeeze(1)
-            # else:
-            done = exps.next_env_step.done
-            # x = exps.env_step[done].observation[:,0]
-            # theta = exps.env_step[done].observation[:,2]
-            # plt.plot(x.numpy(),theta.numpy(),'.');
-            print('%d of %d are done'%(torch.sum(done).numpy(),done.shape[0]))
-
+            # print(Counter(self.exp_memory.buffer.agent.actions.squeeze().numpy().tolist()))
             next_env_steps = exps.next_env_step
-            max_next_value = self.model(next_env_steps).max(dim=1)[0] # [0] is because in pytorch .max(...) returns tuple (max values, argmax)
-            max_next_value = torch.tensor(max_next_value.data)
+
+            if self.double_dqn:
+                target_q = self.target_model(next_env_steps)
+                model_q = self.agent(next_env_steps)
+                max_next_value = target_q.gather(1, model_q.argmax(dim=1, keepdim=True)).squeeze(1)
+            else:
+                max_next_value = self.target_model(next_env_steps).max(dim=1)[0] # [0] is because in pytorch .max(...) returns tuple (max values, argmax)
+
             mask = torch.tensor((1 - next_env_steps.done), dtype=torch.float)
             estimated_return = next_env_steps.reward + self.discount * max_next_value * mask
 
-        self.model.train()
-        q_values = self.model(exps.env_step)
+        self.agent.train()
+        q_values = self.agent(exps.env_step)
         exp_actions = exps.action.unsqueeze(1)
         q_selected = q_values.gather(1, exp_actions).squeeze(1)
 
@@ -126,16 +120,17 @@ class DQNAlgo(object):
 
         self.batch_idx+=1
         if self.batch_idx % self.target_model_update_interval == 0:
-            self.target_model.load_state_dict(self.model.state_dict())
+            self.target_model.load_state_dict(self.agent.state_dict())
             self.target_model.eval()
 
         def get_metrics_to_log(log,last_n_steps):
             keep = min(len(log['log_episode_rewards']), last_n_steps)
             metrics = {
-                "dones":log['log_done_counter'],
+                "episodes":log['log_done_counter'],
                 "loss":loss_value.data.numpy(),
                 "rewards": calc_stats(log['log_episode_rewards'][-keep:])['mean'],
-                "step": calc_stats(log['log_num_steps'][-keep:])['mean'],
+                "episode-length": calc_stats(log['log_num_steps'][-keep:])['median'],
+                "episode-length-std": calc_stats(log['log_num_steps'][-keep:])['std'],
             }
             return metrics
 
@@ -145,7 +140,7 @@ class DQNAlgo(object):
 
         def agent_step_fun(env_step):
             eps = self.eps_schedule.value(self.batch_idx)
-            return self.model.step(env_step, eps)
+            return self.agent.step(env_step, eps)
 
         gather_exp_via_rollout(self.env.step,agent_step_fun, self.exp_memory, self.num_rollout_steps)
 
