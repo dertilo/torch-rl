@@ -284,6 +284,10 @@ class SnakeWrapper(gym.Env):
     def render(self, mode='human'):
         return self.env.render(mode)
 
+    def seed(self, seed=None):
+        return self.env.seed(seed)
+
+
 #
 # register(
 #     id='MiniGrid-Snake-v0',

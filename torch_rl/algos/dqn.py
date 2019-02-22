@@ -4,21 +4,12 @@ from collections import Counter
 import gym
 import torch
 import torch.nn.functional as F
-import numpy
 
 from agent_models import QModel
-from torch_rl.algos.train_methods import flatten_parallel_rollout, log_step, ExperienceMemory, \
-    CsvLogger
+from torch_rl.algos.train_methods import flatten_parallel_rollout, step_logging_fun, ExperienceMemory, \
+    CsvLogger, gather_exp_via_rollout
 from torch_rl.utils.dictlist import DictList
 from utils.general import calc_stats
-
-
-def gather_exp_via_rollout(model_step_fun, env_step_fun, exp_memory:ExperienceMemory, num_rollout_steps):
-    for _ in range(num_rollout_steps):
-        i = exp_memory.last_written_idx
-        env_step = env_step_fun(exp_memory[i].agent)
-        agent_step = model_step_fun(env_step)
-        exp_memory.store_single(DictList.build({'env':env_step,'agent':agent_step}))
 
 
 class LinearAndConstantSchedule(object):
@@ -70,7 +61,7 @@ class DQNAlgo(object):
             initial_agent_step = self.model.step(initial_env_step)
         initial_exp = DictList.build({'env':initial_env_step,'agent':initial_agent_step})
 
-        self.exp_memory = ExperienceMemory(200, initial_exp,log_step)
+        self.exp_memory = ExperienceMemory(200, initial_exp, step_logging_fun)
 
         self.batch_size = 32#self.num_rollout_steps * self.num_envs
 
@@ -78,12 +69,12 @@ class DQNAlgo(object):
 
         with torch.no_grad():
             model.eval()
-            def model_step_fun(env_step):
+            def agent_step_fun(env_step):
                 return self.model.step(env_step,1.0)
             def env_step_fun(act):
                 # env.render()
                 return self.env.step(act)
-            gather_exp_via_rollout(model_step_fun,env_step_fun,self.exp_memory,len(self.exp_memory))
+            gather_exp_via_rollout(env_step_fun,agent_step_fun, self.exp_memory, len(self.exp_memory))
 
         # done_obs = self.exp_memory.buffer[:-1].env.observation[self.exp_memory.buffer[1:].env.done, :]
         # x = done_obs[:,0]
@@ -95,7 +86,6 @@ class DQNAlgo(object):
         # print(Counter(self.exp_memory.buffer.agent.actions.squeeze().numpy().tolist()))
 
     def train_batch(self):
-        from matplotlib import pyplot as plt
         with torch.no_grad():
             self.model.eval()
             exps = self.collect_experiences()
@@ -153,11 +143,11 @@ class DQNAlgo(object):
 
     def collect_experiences(self):
 
-        def model_step_fun(env_step):
+        def agent_step_fun(env_step):
             eps = self.eps_schedule.value(self.batch_idx)
             return self.model.step(env_step, eps)
 
-        gather_exp_via_rollout(model_step_fun,self.env.step,self.exp_memory,self.num_rollout_steps)
+        gather_exp_via_rollout(self.env.step,agent_step_fun, self.exp_memory, self.num_rollout_steps)
 
         indexes = torch.randint(0,len(self.exp_memory)-1,(self.batch_size//self.num_envs,))
         next_indexes = indexes+1

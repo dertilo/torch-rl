@@ -37,7 +37,7 @@ class ACModel(nn.Module):
 
         logprob = dist.log_prob(actions)
 
-        return {'actions':actions,'values':values,'logprobs':logprob,'hidden_states':self.hidden_state}
+        return {'actions':actions,'v_values':values,'logprobs':logprob,'hidden_states':self.hidden_state}
 
 def epsgreedy_action(num_actions, policy_actions, epsilon):
     random_actions = torch.randint_like(policy_actions, num_actions)

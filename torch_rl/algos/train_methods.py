@@ -42,7 +42,7 @@ class CsvLogger(object):
         self.csv_writer.writerow(list(logs.values()))
         self.csv_file.flush()
 
-def log_step(log:Dict, exp:DictList):
+def step_logging_fun(log:Dict, exp:DictList):
     if log=={}:
         num_envs = len(exp)
         log_initial = {
@@ -106,6 +106,9 @@ class ExperienceMemory(object):
         self.inc_idx()
         return self.current_idx
 
-    # def sample_batch(self,batch_size):
-    #     indexes = torch.randint(0,10,(batch_size,))
-    #     return self.buffer[indexes]
+def gather_exp_via_rollout(env_step_fun,agent_step_fun, exp_memory:ExperienceMemory, num_rollout_steps):
+    for _ in range(num_rollout_steps):
+        i = exp_memory.last_written_idx
+        env_step = env_step_fun(exp_memory[i].agent)
+        agent_step = agent_step_fun(env_step)
+        exp_memory.store_single(DictList.build({'env':env_step,'agent':agent_step}))
