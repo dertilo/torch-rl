@@ -4,11 +4,9 @@ import time
 import gym
 import torch
 
-from agent_models import ACModel
+from envs import build_SnakeEnv, SnakeAgent
 from scripts.visualize import visualize_it
 from torch_rl.algos.a2c import A2CAlgo
-from torch_rl.utils.penv import ParallelEnv
-from utils.format import preprocess_images
 from utils.general import set_seeds, calc_stats
 from utils.save import get_logger, get_csv_writer, save_model
 
@@ -81,63 +79,6 @@ args = argparse.Namespace(**{
 })
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class PreprocessWrapper(gym.Env):
-    def __init__(self,env:gym.Env):
-        self.env = env
-        self.observation_space = env.observation_space
-        self.action_space = env.action_space
-
-    def step(self, act):
-        actions = act.get('actions').cpu().numpy()
-        env_step = self.env.step(actions)
-        return self.process_env_step(env_step)
-
-    def process_env_step(self, env_step):
-        return {'reward': torch.tensor(env_step.get('reward')),
-                'done': torch.tensor(env_step.get('done'), dtype=torch.float),
-                'image': preprocess_images(env_step.get('observation'), device=device)}
-
-    def reset(self):
-        env_step = self.env.reset()
-        return self.process_env_step(env_step)
-
-    def render(self, mode='human'):
-        return self.env.render(mode)
-
-class DictEnvWrapper(gym.Env):
-    def __init__(self,env:gym.Env):
-        self.env = env
-        self.observation_space = env.observation_space
-        self.action_space = env.action_space
-
-    def step(self, action):
-        obs,reward,done,_ = self.env.step(action)
-        if done:
-            obs = self.env.reset()
-        return {'observation':obs['image'],'reward':reward,'done':done}
-
-    def reset(self):
-        obs = self.env.reset()
-        return {'observation':obs['image'],'reward':0,'done':False}
-
-    def render(self, mode='human'):
-        return self.env.render(mode)
-
-class SingleEnvWrapper(gym.Env):
-    def __init__(self,env:gym.Env):
-        self.env = env
-        self.observation_space = env.observation_space
-        self.action_space = env.action_space
-
-    def step(self, action):
-        return {k:[v] for k,v in self.env.step(action).items()}
-
-    def reset(self):
-        return {k:[v] for k,v in self.env.reset().items()}
-
-    def render(self, mode='human'):
-        return self.env.render(mode)
-
 model_dir = 'storage/'+args.model_name
 
 logger = get_logger(model_dir)
@@ -145,37 +86,24 @@ csv_file, csv_writer = get_csv_writer(model_dir)
 
 set_seeds(args.seed)
 
-
-def build_env_supplier(i):
-    def env_supplier():
-        env = gym.make(args.env_name)
-        env.seed(args.seed + 10000 * i)
-        env = DictEnvWrapper(env)
-        return env
-    return env_supplier
-
-
-envs = PreprocessWrapper(ParallelEnv.build(build_env_supplier, args.num_envs))
-
-acmodel = ACModel(envs.observation_space, envs.action_space)
+envs = build_SnakeEnv(num_envs=16, use_multiprocessing=True)
+agent = SnakeAgent(envs.observation_space, envs.action_space)
 logger.info("Model successfully created\n")
-logger.info("{}\n".format(acmodel))
+logger.info("{}\n".format(agent))
 
 if torch.cuda.is_available():
-    acmodel.cuda()
+    agent.cuda()
 logger.info("CUDA available: {}\n".format(torch.cuda.is_available()))
 
-algo = A2CAlgo(envs, acmodel,num_rollout_steps=args.num_rollout_steps, discount=0.99, lr=7e-4, gae_lambda=0.95,
-                        entropy_coef=0.01, value_loss_coef=0.5, max_grad_norm=0.5, num_recurr_steps=1)
+algo = A2CAlgo(envs, agent, num_rollout_steps=args.num_rollout_steps, discount=0.99, lr=7e-4, gae_lambda=0.95,
+               entropy_coef=0.01, value_loss_coef=0.5, max_grad_norm=0.5, num_recurr_steps=1)
 
 train_model(args.num_batches,algo,logger,csv_writer,csv_file)
 
-if torch.cuda.is_available():
-    acmodel.cpu()
-save_model(acmodel, model_dir)
-if torch.cuda.is_available():
-    acmodel.cuda()
+# if torch.cuda.is_available():
+#     agent.cpu()
+# save_model(agent, model_dir)
+# if torch.cuda.is_available():
+#     agent.cuda()
 
-
-env = PreprocessWrapper(SingleEnvWrapper(DictEnvWrapper(gym.make(args.env_name))))
-visualize_it(env,model_dir)
+visualize_it(build_SnakeEnv(num_envs=1, use_multiprocessing=False),agent)
