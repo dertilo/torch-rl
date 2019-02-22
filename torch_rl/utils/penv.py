@@ -1,6 +1,6 @@
 import torch
 from multiprocessing import Process, Pipe
-from typing import List, Callable
+from typing import List, Callable, Dict
 
 import gym
 
@@ -18,7 +18,6 @@ def worker(conn, env_supplier):
             raise NotImplementedError
 
 class ParallelEnv(gym.Env):
-    """A concurrent execution of environments in multiple processes."""
 
     def __init__(self,env_suppliers:List[Callable[[],gym.Env]] ):
 
@@ -54,5 +53,20 @@ class ParallelEnv(gym.Env):
         raise NotImplementedError
 
     @staticmethod
-    def build(build_env_supplier,num_envs):
+    def build(build_env_supplier, num_envs):
         return ParallelEnv([build_env_supplier(i) for i in range(num_envs)])
+
+class SingleEnvWrapper(gym.Env):
+    def __init__(self,env:gym.Env):
+        self.env = env
+        self.observation_space = env.observation_space
+        self.action_space = env.action_space
+
+    def step(self, action):
+        return {k:[v] for k,v in self.env.step(action).items()}
+
+    def reset(self):
+        return {k:[v] for k,v in self.env.reset().items()}
+
+    def render(self, mode='human'):
+        return self.env.render(mode)
