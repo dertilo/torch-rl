@@ -48,7 +48,7 @@ def log_step(log:Dict, exp:DictList):
         log_initial = {
             'rewards_sum':torch.zeros((num_envs,)),
             'num_steps_sum':torch.zeros((num_envs,)),
-            # 'log_done_counter':0,
+            'log_done_counter':0,
             'log_episode_rewards':[],
             'log_num_steps':[]
         }
@@ -62,20 +62,12 @@ def log_step(log:Dict, exp:DictList):
     log['num_steps_sum'] += torch.ones(reward.shape[0])
     for i, done_ in enumerate(done):
         if done_:
-            # log['log_done_counter'] += 1
+            log['log_done_counter'] += 1
             log['log_episode_rewards'].append(log['rewards_sum'][i].item())
             log['log_num_steps'].append(log['num_steps_sum'][i].item())
     mask = torch.tensor(1 - done, dtype=torch.float)
     log['rewards_sum'] *= mask
     log['num_steps_sum'] *= mask
-
-def get_metrics_to_log(log,last_n_steps):
-    keep = min(len(log['log_episode_rewards']),last_n_steps)
-    metrics = {
-        "rewards": calc_stats(log['log_episode_rewards'][-keep:])['mean'],
-        "step": calc_stats(log['log_num_steps'][-keep:])['mean'],
-    }
-    return metrics
 
 
 def fill_with_zeros(dim, d):
@@ -114,6 +106,6 @@ class ExperienceMemory(object):
         self.inc_idx()
         return self.current_idx
 
-    def sample_batch(self,batch_size):
-        indexes = torch.randint(0,10,(batch_size,))
-        return self.buffer[indexes]
+    # def sample_batch(self,batch_size):
+    #     indexes = torch.randint(0,10,(batch_size,))
+    #     return self.buffer[indexes]

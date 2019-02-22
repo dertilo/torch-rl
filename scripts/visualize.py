@@ -3,26 +3,17 @@
 import argparse
 import gym
 import time
-
-from agent_models import ACModel
 from utils.general import set_seeds
-from utils.save import load_model
 
 try:
     import gym_minigrid
 except ImportError:
     pass
 
-
-import envs
-
-
-def visualize_it(env:gym.Env,model_file,pause_dur=0.1,seed=0,argmax=False):
+def visualize_it(env:gym.Env,agent,pause_dur=0.1,seed=0,argmax=False):
 
     set_seeds(seed)
     env.seed(seed)
-
-    agent:ACModel = load_model(model_file)
 
     obs = env.reset()
     while True:
