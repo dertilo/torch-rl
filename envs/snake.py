@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from gym import spaces
 from gym_minigrid.minigrid import MiniGridEnv, Goal, Lava, Grid
+from gym_minigrid.register import register
 from torch.distributions.categorical import Categorical
 
 from agent_models import initialize_parameters, ACModel, QModel
@@ -25,6 +26,7 @@ class Snake(object):
         return self.body.pop()
 
     def grow_head(self, x, y):
+        assert all((x,y)!=pos for pos in self.body)
         self.body.appendleft((x,y))
 
 
@@ -54,24 +56,23 @@ class SnakeEnv(MiniGridEnv):
 
 
     def spawn_new_food(self):
-        empties = [(i,j) for i in range(self.grid.height) for j in range(self.grid.width) if self.grid.get(i,j) is None]
+        empties = [(i,j) for i in range(self.grid.height) for j in range(self.grid.width) if self.grid.get(i,j) is None and self.grid.get(i,j)!=tuple(self.agent_pos)]
         self.grid.set(*random.choice(empties),Goal())
 
     def _gen_grid(self, width, height):
         # Create an empty grid
         self.grid = Grid(width, height)
 
-        # Generate the surrounding walls
         self.grid.wall_rect(0, 0, width, height)
 
-        # Place the agent in the top-left corner
         self.start_pos = (2, 2)
+        self.agent_pos = self.start_pos #TODO: the env holding agent traits is shit!
         self.start_dir = 0
-        self.snake = Snake([self.start_pos,(self.start_pos[0],self.start_pos[1]-1)])
+        self.agent_dir = self.start_dir
+        self.snake = Snake([self.start_pos,tuple(self.start_pos-self.dir_vec)])
+        [self.grid.set(*pos,Lava()) for pos in self.snake.body]
 
-
-        # Place a goal square in the bottom-right corner
-        self.grid.set(width - 2, height - 2, Goal())
+        self.spawn_new_food()
 
         self.mission = "get to the green goal square"
 
@@ -84,9 +85,7 @@ class SnakeEnv(MiniGridEnv):
         done = False
 
         if action == self.actions.left:
-            self.agent_dir -= 1
-            if self.agent_dir < 0:
-                self.agent_dir += 4
+            self.agent_dir = (self.agent_dir - 1) % 4
 
         elif action == self.actions.right:
             self.agent_dir = (self.agent_dir + 1) % 4
@@ -101,7 +100,7 @@ class SnakeEnv(MiniGridEnv):
 
         if fwd_cell is None:
             self.grid.set(*self.agent_pos, Lava())
-            self.snake.grow_head(*self.agent_pos)
+            self.snake.grow_head(*fwd_pos)
             self.grid.set(*self.snake.rm_tail(), None)
             self.agent_pos = fwd_pos
 
@@ -109,14 +108,14 @@ class SnakeEnv(MiniGridEnv):
 
         elif fwd_cell.type == 'goal':
             self.grid.set(*self.agent_pos, Lava())
-            self.snake.grow_head(*self.agent_pos)
+            self.snake.grow_head(*fwd_pos)
             self.agent_pos = fwd_pos
 
             self.spawn_new_food()
             reward = 1.0
 
         elif (fwd_cell.type == 'lava' or fwd_cell.type == 'wall'):
-            reward = .0
+            reward = -1.0
             done = True
 
         else:
@@ -129,7 +128,7 @@ class SnakeEnv(MiniGridEnv):
             assert False
 
         obs = self.gen_obs()
-
+        assert any([isinstance(self.grid.get(i,j),Goal) for i in range(self.grid.height) for j in range(self.grid.width)])
         return obs, reward, done, {}
 
 class SnakeA2CAgent(ACModel):

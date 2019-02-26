@@ -52,8 +52,11 @@ class QModel(nn.Module):
     def forward(self, observation:Dict)->torch.Tensor:
         raise NotImplementedError
 
-    def step(self,observation:Dict[str,torch.Tensor],eps=0.1)->Dict[str,torch.Tensor]:
+    def step(self,observation:Dict[str,torch.Tensor],eps=0.05)->Dict[str,torch.Tensor]:
         q_values = self(observation)
         policy_actions = q_values.argmax(dim=1)
-        actions = epsgreedy_action(self.num_actions, policy_actions, eps)
+        if eps>0.0:
+            actions = epsgreedy_action(self.num_actions, policy_actions, eps)
+        else:
+            actions = policy_actions
         return {'actions':actions,'q_values':q_values}
