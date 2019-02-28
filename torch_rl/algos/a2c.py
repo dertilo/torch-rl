@@ -54,8 +54,8 @@ class A2CAlgo(object):
 
         self.num_frames = self.num_rollout_steps * self.num_envs
 
-        self.optimizer = torch.optim.RMSprop(self.agent.parameters(), lr,
-                                             alpha=rmsprop_alpha, eps=rmsprop_eps)
+        self.optimizer = torch.optim.Adam(self.agent.parameters(), lr)#
+                                             # alpha=rmsprop_alpha, eps=rmsprop_eps)
 
     def train_batch(self):
         with torch.no_grad():
@@ -121,7 +121,7 @@ class A2CAlgo(object):
     def collect_experiences(self):
         self.agent.set_hidden_state(self.exp_memory[-1])
         assert self.exp_memory.current_idx==0
-        self.exp_memory.store_single(self.exp_memory.buffer[-1])
+        self.exp_memory.last_becomes_first()
         gather_exp_via_rollout(self.env.step, self.agent.step,self.exp_memory,self.num_rollout_steps)
         assert self.exp_memory.last_written_idx == self.num_rollout_steps
 
@@ -140,29 +140,9 @@ class A2CAlgo(object):
             'returnn': flatten_array(agent_steps[:-1].v_values + advantages)
         })
 
-    def _get_starting_indexes(self):
-        """Gives the indexes of the observations given to the model and the
-        experiences used to compute the loss at first.
-
-        The indexes are the integers from 0 to `self.num_frames` with a step of
-        `self.recurrence`. If the model is not recurrent, they are all the
-        integers from 0 to `self.num_frames`.
-
-        Returns
-        -------
-        starting_indexes : list of int
-            the indexes of the experiences to be used at first
-        """
-
-        starting_indexes = numpy.arange(0, self.num_frames, self.num_recurr_steps)
-        return starting_indexes
-
     def train_model(self,num_batches,logger:CsvLogger):
-
         logger.on_train_start()
         for k in range(num_batches):
-            update_start_time = time.time()
             metrics_to_log = self.train_batch()
-            update_end_time = time.time()
-            logger.log_it(metrics_to_log,update_start_time,update_end_time)
+            logger.log_it(metrics_to_log)
 

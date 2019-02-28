@@ -16,7 +16,6 @@ def flatten_array(v):
 
 class CsvLogger(object):
     def __init__(self,csv_file,csv_writer,logger):
-        self.num_steps = 0
         self.update = 0
 
         self.csv_file = csv_file
@@ -26,7 +25,7 @@ class CsvLogger(object):
     def on_train_start(self):
         self.total_start_time = time.time()
 
-    def log_it(self,logs,update_start_time,update_end_time):
+    def log_it(self,logs):
 
         self.update += 1
 
@@ -37,7 +36,7 @@ class CsvLogger(object):
         s = ' '.join([k+'=%0.2f'%v for k,v in logs.items()])
         self.logger.info(s)
 
-        if self.num_steps == 0:
+        if self.update == 1:
             self.csv_writer.writerow(list(logs.keys()))
         self.csv_writer.writerow(list(logs.values()))
         self.csv_file.flush()
@@ -103,6 +102,12 @@ class ExperienceMemory(object):
     def store_single(self, datum:DictList):
         self.logging_fun(self.log, datum)
         self.buffer[self.current_idx]=datum
+        self.inc_idx()
+        return self.current_idx
+
+    def last_becomes_first(self):
+        assert self.current_idx == 0
+        self.buffer[self.current_idx]=self.buffer[-1]
         self.inc_idx()
         return self.current_idx
 
