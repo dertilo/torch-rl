@@ -1,13 +1,10 @@
-from typing import Dict
-
 import gym
 import numpy
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-from agent_models import initialize_parameters, QModel
-from torch_rl.utils.penv import SingleEnvWrapper, ParallelEnv
+from torch_rl.envs_agents.agent_models import QModel
+from torch_rl.penv import SingleEnvWrapper, ParallelEnv
 
 
 class CartPolePreprocessWrapper(gym.Env):

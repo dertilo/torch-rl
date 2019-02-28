@@ -1,15 +1,8 @@
 from abc import abstractmethod
-from typing import Dict, Tuple, Any
+from typing import Dict, Any
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.distributions.categorical import Categorical
-import gym
-
-# Function from https://github.com/ikostrikov/pytorch-a2c-ppo-acktr/blob/master/model.py
-from torch_rl.utils.dictlist import DictList
-
 
 def initialize_parameters(m):
     classname = m.__class__.__name__

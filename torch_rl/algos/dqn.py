@@ -1,15 +1,12 @@
-import time
-from collections import Counter
-
 import gym
 import torch
 import torch.nn.functional as F
 
-from agent_models import QModel
 from torch_rl.algos.train_methods import flatten_parallel_rollout, step_logging_fun, ExperienceMemory, \
     CsvLogger, gather_exp_via_rollout
-from torch_rl.utils.dictlist import DictList
-from utils.general import calc_stats
+from torch_rl.dictlist import DictList
+from torch_rl.algos.abstract_agents import QModel
+from torch_rl.utils import calc_stats
 
 
 class LinearAndConstantSchedule(object):
@@ -156,10 +153,8 @@ class DQNAlgo(object):
         self.eps_schedule = LinearAndConstantSchedule(initial_value=0.1, final_value=0.1, end_of_interpolation=num_batches)
         logger.on_train_start()
         for k in range(num_batches):
-            update_start_time = time.time()
             metrics_to_log = self.train_batch()
-            update_end_time = time.time()
-            logger.log_it(metrics_to_log,update_start_time,update_end_time)
+            logger.log_it(metrics_to_log)
 
 
 

@@ -3,8 +3,7 @@ import time
 import torch
 from typing import Dict
 
-from torch_rl.utils.dictlist import DictList
-from utils.general import calc_stats
+from torch_rl.dictlist import DictList
 
 
 def flatten_parallel_rollout(d):

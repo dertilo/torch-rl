@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 
 import argparse
-import gym
 import time
 import torch
-from torch_rl.utils.penv import ParallelEnv
+
+from torch_rl import utils
+from torch_rl.penv import ParallelEnv
 
 try:
     import gym_minigrid
 except ImportError:
     pass
-
-import utils
+#TODO: !!!
+assert False
 
 def run_evaluation(model_file):
     # Set seed for all randomness sources

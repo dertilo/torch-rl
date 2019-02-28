@@ -2,13 +2,11 @@ import argparse
 
 import torch
 
-from envs import SnakeDQNAgent, build_SnakeEnv
-from envs.cartpole import CartPoleAgent, build_CartPoleEnv
-from scripts.visualize import visualize_it
+from torch_rl.envs_agents.snake import build_SnakeEnv, SnakeDQNAgent
+from torch_rl.visualize import visualize_it
 from torch_rl.algos.dqn import DQNAlgo
 from torch_rl.algos.train_methods import CsvLogger
-from utils.general import set_seeds
-from utils.save import get_logger, get_csv_writer, save_model
+from torch_rl.utils import get_logger, get_csv_writer, set_seeds
 
 try:
     import gym_minigrid
@@ -20,7 +18,7 @@ args = argparse.Namespace(**{
     'model_name':model_name,
     'seed':1,
     'num_envs':1,
-    'num_batches':10000,
+    'num_batches':100,
     'num_rollout_steps':1
 
 })

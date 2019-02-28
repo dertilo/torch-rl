@@ -1,21 +1,19 @@
 import random
 from collections import deque
 from enum import IntEnum
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple
 
 import gym
+import numpy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from gym import spaces
 from gym_minigrid.minigrid import MiniGridEnv, Goal, Lava, Grid
-from gym_minigrid.register import register
 from torch.distributions.categorical import Categorical
 
-from agent_models import initialize_parameters, ACModel, QModel
-from scripts.visualize import visualize_it
-from torch_rl.utils.penv import SingleEnvWrapper, ParallelEnv
-from utils.format import preprocess_images
+from torch_rl.algos.abstract_agents import initialize_parameters, QModel, ACModel
+from torch_rl.penv import SingleEnvWrapper, ParallelEnv
 
 
 class Snake(object):
@@ -263,6 +261,12 @@ class SnakeDQNAgent(QModel):
         x = image[:,:,:,0].view(image.size(0),-1)
         return self.q_nn(x)
 
+
+def preprocess_images(images, device=None):
+    # Bug of Pytorch: very slow if not first converted to numpy array
+    images = numpy.array(images)
+    return torch.tensor(images, device=device, dtype=torch.float)
+
 class PreprocessWrapper(gym.Env):
     def __init__(self,env:gym.Env):
         self.env = env
@@ -339,6 +343,7 @@ def build_SnakeEnv(num_envs,use_multiprocessing):
 
 
 if __name__ == '__main__':
+    from torch_rl.visualize import visualize_it
     env = build_SnakeEnv(num_envs=1,use_multiprocessing=False)
     x = env.reset()
     agent = SnakeA2CAgent(env.observation_space, env.action_space)

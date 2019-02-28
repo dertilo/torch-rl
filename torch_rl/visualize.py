@@ -3,7 +3,8 @@
 import argparse
 import gym
 import time
-from utils.general import set_seeds
+
+from torch_rl.utils import set_seeds
 
 try:
     import gym_minigrid

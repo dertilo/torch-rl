@@ -3,11 +3,9 @@
 from __future__ import division, print_function
 
 import sys
-import numpy
 import gym
 import time
-from optparse import OptionParser
-import envs
+
 
 def run_manual(env_name):
 

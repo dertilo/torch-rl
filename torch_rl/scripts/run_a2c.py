@@ -1,15 +1,12 @@
 import argparse
-import time
 
-import gym
 import torch
 
-from envs import build_SnakeEnv, SnakeA2CAgent
-from scripts.visualize import visualize_it
 from torch_rl.algos.a2c import A2CAlgo
 from torch_rl.algos.train_methods import CsvLogger
-from utils.general import set_seeds, calc_stats
-from utils.save import get_logger, get_csv_writer, save_model
+from torch_rl.envs_agents.snake import build_SnakeEnv, SnakeA2CAgent
+from torch_rl.visualize import visualize_it
+from torch_rl.utils import get_logger, get_csv_writer, set_seeds
 
 try:
     import gym_minigrid
@@ -25,7 +22,7 @@ for i in [1]:
         'env_name':env_name,
         'seed':i,
         'num_envs':16,
-        'num_batches':1000,
+        'num_batches':100,
         'num_rollout_steps':5
     })
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -52,4 +49,4 @@ for i in [1]:
 
     algo.train_model(args.num_batches,CsvLogger(csv_file,csv_writer,logger))
 
-# visualize_it(build_SnakeEnv(num_envs=1, use_multiprocessing=False),agent)
+visualize_it(build_SnakeEnv(num_envs=1, use_multiprocessing=False),agent)

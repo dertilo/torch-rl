@@ -1,15 +1,12 @@
-import time
-from typing import Dict
-
 import gym
 import numpy
 import torch
 
-from agent_models import ACModel
+from torch_rl.algos.abstract_agents import ACModel
 from torch_rl.algos.train_methods import flatten_parallel_rollout, flatten_array, gather_exp_via_rollout, \
     ExperienceMemory, step_logging_fun, CsvLogger
-from torch_rl.utils.dictlist import DictList
-from utils.general import calc_stats
+from torch_rl.dictlist import DictList
+from torch_rl.utils import calc_stats
 
 
 def generalized_advantage_estimation(rewards,values,dones,num_rollout_steps,discount,gae_lambda):
