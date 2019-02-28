@@ -11,13 +11,14 @@ try:
 except ImportError:
     pass
 
-def visualize_it(env:gym.Env,agent,pause_dur=0.1,seed=0,argmax=False):
+def visualize_it(env:gym.Env,agent,pause_dur=0.1,seed=0,argmax=False,num_steps=1000):
 
     set_seeds(seed)
     env.seed(seed)
-
+    c=0
     obs = env.reset()
     while True:
+        c+=1
         time.sleep(pause_dur)
         renderer = env.render()
 
@@ -25,6 +26,8 @@ def visualize_it(env:gym.Env,agent,pause_dur=0.1,seed=0,argmax=False):
         obs = env.step(action)
 
         if renderer.window is None:
+            break
+        if c>num_steps:
             break
 
 if __name__ == '__main__':

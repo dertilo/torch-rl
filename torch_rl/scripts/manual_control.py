@@ -6,11 +6,9 @@ import sys
 import gym
 import time
 
+from torch_rl.envs_agents.snake import SnakeEnv
 
-def run_manual(env_name):
-
-    # Load the gym environment
-    env = gym.make(env_name)
+def run_manual(env):
 
     def resetEnv():
         env.reset()
@@ -72,4 +70,4 @@ def run_manual(env_name):
             break
 
 if __name__ == "__main__":
-    run_manual('MiniGrid-Snake-v0')
+    run_manual(SnakeEnv())

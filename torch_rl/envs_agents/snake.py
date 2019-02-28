@@ -342,11 +342,15 @@ def build_SnakeEnv(num_envs,use_multiprocessing):
     return env
 
 
-if __name__ == '__main__':
+def test_env():
     from torch_rl.visualize import visualize_it
-    env = build_SnakeEnv(num_envs=1,use_multiprocessing=False)
+    env = build_SnakeEnv(num_envs=1, use_multiprocessing=False)
     x = env.reset()
     agent = SnakeA2CAgent(env.observation_space, env.action_space)
-    visualize_it(env,agent)
+    visualize_it(env, agent,num_steps=10)
+
+
+if __name__ == '__main__':
+    test_env()
 
 

@@ -8,18 +8,10 @@ from torch_rl.envs_agents.snake import build_SnakeEnv, SnakeA2CAgent
 from torch_rl.visualize import visualize_it
 from torch_rl.utils import get_logger, get_csv_writer, set_seeds
 
-try:
-    import gym_minigrid
-except ImportError:
-    raise Exception('gym_minigrid must be in PYTHONPATH!')
-
-env_name = 'MiniGrid-Snake-v0'
-# env_name = 'MiniGrid-Empty-8x8-v0'
 for i in [1]:
     model_name = 'snake-a2c-%d'%i
     args = argparse.Namespace(**{
         'model_name':model_name,
-        'env_name':env_name,
         'seed':i,
         'num_envs':16,
         'num_batches':100,
