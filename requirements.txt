@@ -1,3 +1,4 @@
+gym_minigrid @ git+https://github.com/maximecb/gym-minigrid.git#egg=gym_minigrid
 matplotlib==3.0.2
 scipy==1.2.0
 torch==1.0.1

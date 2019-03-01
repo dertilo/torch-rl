@@ -10,5 +10,5 @@ setup(
     license='LICENSE.txt',
     long_description=open('README.md').read(),
     install_requires=install_requires,
-    dependency_links=['git+https://github.com/maximecb/gym-minigrid.git#egg=gym_minigrid']
+    # dependency_links=['git+https://github.com/maximecb/gym-minigrid.git#egg=gym_minigrid-1.0']#TODO: why is this not working?
 )
