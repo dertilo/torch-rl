@@ -1,4 +1,5 @@
 gym_minigrid @ git+https://github.com/maximecb/gym-minigrid.git#egg=gym_minigrid
+resourcesmonitor @ git+https://git@gitlab.tubit.tu-berlin.de/tilo-himmelsbach/resourcesmonitor.git#egg=resourcesmonitor
 matplotlib==3.0.2
 scipy==1.2.0
 torch==1.0.1

@@ -44,12 +44,22 @@ class SnakeEnv(MiniGridEnv):
 
         super().__init__(
             grid_size=size,
-            max_steps=4*size*size,
-            # Set this to True for maximum speed
+            max_steps=None,
             see_through_walls=True
         )
         self.actions = SnakeEnv.Actions
         self.action_space = spaces.Discrete(len(self.actions))
+
+        # self.observation_space = spaces.Dict({
+        #     'image': spaces.Box(
+        #         low=0,
+        #         high=255,
+        #         shape=(size,size,3),
+        #         dtype='uint8'
+        #     )
+        #
+        # })
+
 
 
 
@@ -63,19 +73,33 @@ class SnakeEnv(MiniGridEnv):
 
         self.grid.wall_rect(0, 0, width, height)
 
-        self.start_pos = (2, 2)
+        # self.start_pos = (2, 2)
+        yl,xl,_ = self.observation_space.spaces['image'].shape
+        self.start_pos = (random.randint(2,yl-2),random.randint(2,xl-2))
         self.agent_pos = self.start_pos #TODO: the env holding agent traits is shit!
-        self.start_dir = 0
+        self.start_dir = random.randint(0,3)
         self.agent_dir = self.start_dir
         self.snake = Snake([self.start_pos,tuple(self.start_pos-self.dir_vec)])
         [self.grid.set(*pos,Lava()) for pos in self.snake.body]
 
         self.spawn_new_food()
 
-        self.mission = "get to the green goal square"
+        self.mission = None
 
     def reset(self):
         return super().reset()
+
+    # def gen_obs(self):
+    #     image = self.grid.encode()
+    #
+    #     obs = {
+    #         'image': image,
+    #         'direction': self.agent_dir,
+    #         'mission': self.mission
+    #     }
+    #
+    #     return obs
+
 
     def step(self, action):
         self.step_count += 1
@@ -118,9 +142,6 @@ class SnakeEnv(MiniGridEnv):
 
         else:
             assert False
-
-        if self.step_count >= self.max_steps:
-            done = True
 
         if self.step_count==1 and done:
             assert False
@@ -324,8 +345,8 @@ class SnakeWrapper(gym.Env):
 # )
 
 
-def build_SnakeEnv(num_envs,use_multiprocessing):
-    if not use_multiprocessing:
+def build_SnakeEnv(num_envs,num_processes):
+    if num_processes==0:
         assert num_envs==1
         env = PreprocessWrapper(SingleEnvWrapper(SnakeWrapper()))
     else:
@@ -338,19 +359,20 @@ def build_SnakeEnv(num_envs,use_multiprocessing):
 
             return env_supplier
 
-        env = PreprocessWrapper(ParallelEnv.build(build_env_supplier,num_envs))
+        env = PreprocessWrapper(ParallelEnv.build(build_env_supplier,num_envs,num_processes))
     return env
 
 
-def test_env():
+def minimal_test():
     from torch_rl.visualize import visualize_it
-    env = build_SnakeEnv(num_envs=1, use_multiprocessing=False)
+    env = build_SnakeEnv(num_envs=1, num_processes=0)
     x = env.reset()
-    agent = SnakeA2CAgent(env.observation_space, env.action_space)
-    visualize_it(env, agent,num_steps=10)
+    # agent = SnakeA2CAgent(env.observation_space, env.action_space)
+    agent = SnakeDQNAgent(env.observation_space, env.action_space)
+    visualize_it(env, agent,num_steps=100)
 
 
 if __name__ == '__main__':
-    test_env()
+    minimal_test()
 
 

@@ -109,6 +109,7 @@ class A2CAlgo(object):
             metrics = {
                 "episodes":log['log_done_counter'],
                 "rewards": calc_stats(log['log_episode_rewards'][-keep:])['mean'],
+                "med-rewards": calc_stats(log['log_episode_rewards'][-keep:])['median'],
                 "episode-length": calc_stats(log['log_num_steps'][-keep:])['median'],
             }
             return metrics

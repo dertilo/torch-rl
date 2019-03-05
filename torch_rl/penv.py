@@ -4,29 +4,36 @@ from typing import List, Callable, Dict
 
 import gym
 
-def worker(conn, env_supplier):
-    env = env_supplier()
+def worker(conn, env_suppliers:list):
+    envs = [supplier() for supplier in env_suppliers]
     while True:
         cmd, data = conn.recv()
         if cmd == "step":
-            conn.send(env.step(data))
+            conn.send([env.step(d) for env,d in zip(envs,data)])
         elif cmd == "reset":
-            conn.send(env.reset())
+            conn.send([env.reset() for env in envs])
         elif cmd == 'get_spaces':
-            conn.send((env.observation_space, env.action_space))
+            conn.send((envs[0].observation_space, envs[0].action_space))
         else:
             raise NotImplementedError
 
+def receive_process_answers(pipes):
+    LD = [x for p in pipes for x in p.recv()]
+    DL = {k: [dic[k] for dic in LD] for k in LD[0]}
+    return DL
+
 class ParallelEnv(gym.Env):
 
-    def __init__(self,env_suppliers:List[Callable[[],gym.Env]] ):
-
+    def __init__(self,env_suppliers:List[Callable[[],gym.Env]],num_processes=1):
+        assert len(env_suppliers)%num_processes==0
+        self.envs_per_process=len(env_suppliers)//num_processes
         self.locals = []
-        self.num_envs = len(env_suppliers)
-        for env_sup in env_suppliers:
+        self.num_processes = num_processes
+
+        for k in range(num_processes):
             local, remote = Pipe()
             self.locals.append(local)
-            p = Process(target=worker, args=(remote, env_sup))
+            p = Process(target=worker, args=(remote, self.kth_slice(env_suppliers,k)))
             p.daemon = True
             p.start()
             remote.close()
@@ -34,27 +41,26 @@ class ParallelEnv(gym.Env):
         self.locals[0].send(('get_spaces', None))
         self.observation_space, self.action_space = self.locals[0].recv()
 
+    def kth_slice(self,x,k):
+        return x[k*self.envs_per_process:(k+1)*self.envs_per_process]
+
     def reset(self):
         for local in self.locals:
             local.send(("reset", None))
-        LD = [local.recv() for local in self.locals]
-        DL = {k: [dic[k] for dic in LD] for k in LD[0]}
-        return DL
+        return receive_process_answers(self.locals)
+
 
     def step(self, actions):
-        for local, action in zip(self.locals, actions):
-            local.send(("step", action))
-
-        LD = [local.recv() for local in self.locals]
-        DL = {k: [dic[k] for dic in LD] for k in LD[0]}
-        return DL
+        for k,local in enumerate(self.locals):
+            local.send(("step", self.kth_slice(actions,k)))
+        return receive_process_answers(self.locals)
 
     def render(self):
         raise NotImplementedError
 
     @staticmethod
-    def build(build_env_supplier, num_envs):
-        return ParallelEnv([build_env_supplier(i) for i in range(num_envs)])
+    def build(build_env_supplier, num_envs,num_processes):
+        return ParallelEnv([build_env_supplier(i) for i in range(num_envs)],num_processes)
 
 class SingleEnvWrapper(gym.Env):
     def __init__(self,env:gym.Env):

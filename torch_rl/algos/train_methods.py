@@ -14,9 +14,9 @@ def flatten_array(v):
     return v.transpose(0, 1).reshape(v.shape[0] * v.shape[1], *v.shape[2:])
 
 class CsvLogger(object):
-    def __init__(self,csv_file,csv_writer,logger):
+    def __init__(self,csv_file,csv_writer,logger,print_interval=100):
         self.update = 0
-
+        self.print_interval = print_interval
         self.csv_file = csv_file
         self.csv_writer = csv_writer
         self.logger = logger
@@ -26,14 +26,15 @@ class CsvLogger(object):
 
     def log_it(self,logs):
 
-        self.update += 1
+        self.update += 1 # TODO
 
-        duration = int(time.time() - self.total_start_time)
+        duration = round(time.time() - self.total_start_time,3)
 
         header = ["update", "duration"]
         logs = {k:v for k,v in zip(header+list(logs.keys()),[self.update,duration]+list(logs.values()))}
         s = ' '.join([k+'=%0.2f'%v for k,v in logs.items()])
-        self.logger.info(s)
+        if self.update%self.print_interval==0:
+            self.logger.info(s)
 
         if self.update == 1:
             self.csv_writer.writerow(list(logs.keys()))

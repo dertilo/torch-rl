@@ -124,10 +124,10 @@ class DQNAlgo(object):
             keep = min(len(log['log_episode_rewards']), last_n_steps)
             metrics = {
                 "episodes":log['log_done_counter'],
-                "loss":loss_value.data.numpy(),
-                "rewards": calc_stats(log['log_episode_rewards'][-keep:])['mean'],
+                # "loss":loss_value.data.numpy(),
+                "rewards": calc_stats(log['log_episode_rewards'][-keep:])['median'],
                 "episode-length": calc_stats(log['log_num_steps'][-keep:])['median'],
-                "episode-length-std": calc_stats(log['log_num_steps'][-keep:])['std'],
+                # "episode-length-std": calc_stats(log['log_num_steps'][-keep:])['std'],
             }
             return metrics
 
