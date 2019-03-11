@@ -1,6 +1,10 @@
 import argparse
 import os
+import sys
+sys.path.append(os.getcwd())
 
+
+from torch_rl.plot_curves import plot_curves
 import torch
 from resmonres.monitor_system_parameters import MonitorSysParams
 
@@ -10,17 +14,17 @@ from torch_rl.algos.dqn import DQNAlgo
 from torch_rl.algos.train_methods import CsvLogger
 from torch_rl.utils import get_logger, get_csv_writer, set_seeds
 
-def main():
-
+if __name__ == '__main__':
     model_name = 'snake-ddqn-1e-0p'
     args = argparse.Namespace(**{
         'model_name':model_name,
         'seed':1,
-        'num_batches':6000,
+        'num_batches':60000,
         'num_rollout_steps':1
 
     })
-    model_dir = 'storage/'+args.model_name
+    storage_path = os.getcwd() + '/storage/'
+    model_dir = storage_path + args.model_name
 
     logger = get_logger(model_dir)
     csv_file, csv_writer = get_csv_writer(model_dir)
@@ -50,6 +54,4 @@ def main():
     # env = build_CartPoleEnv(num_envs=1, use_multiprocessing=False)
     # visualize_it(env,model_dir)
     # visualize_it(build_SnakeEnv(num_envs=1, num_processes=0),agent)
-
-if __name__ == '__main__':
-    main()
+    plot_curves(storage_path)
