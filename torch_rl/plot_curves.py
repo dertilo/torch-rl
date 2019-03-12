@@ -9,15 +9,15 @@ import os
 def plot_curves(path,show=False):
     # header = 'update,frames,FPS,duration,rreturn_mean,rreturn_std,rreturn_min,rreturn_max,num_frames_mean,num_frames_std,num_frames_min,num_frames_max,entropy,value,policy_loss,value_loss,grad_norm,return_mean,return_std,return_min,return_max'.split(',')
     # header = 'update,duration,episodes,rewards,ep-len'.split(',')
-    with open(path + '/' + os.listdir(path)[0] + '/log.csv', mode='rt') as f:
+    model_names = [d for d in os.listdir(path) if os.path.isdir(path+'/'+d)]
+    with open(path + '/' + model_names[0] + '/log.csv', mode='rt') as f:
         cols = f.readline()[:-1].split(',')
         header = [h for h in cols]
         idx = cols.index('update')
         dur_idx = header.index('duration')
         header.pop(dur_idx)
     figs_axes = [plt.subplots(1, 1) for _ in header]
-    model_names = os.listdir(path)
-    for dir_name in os.listdir(path):
+    for dir_name in model_names:
         log_file = path + '/' + dir_name + '/log.csv'
         my_data = genfromtxt(log_file, delimiter=',', skip_header=1)
         for (fig, axes), param in zip(figs_axes, header):
