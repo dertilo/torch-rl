@@ -15,16 +15,16 @@ from torch_rl.algos.train_methods import CsvLogger
 from torch_rl.utils import get_logger, get_csv_writer, set_seeds
 
 if __name__ == '__main__':
-    model_name = 'snake-ddqn-1e-0p'
+    model_name = 'snake-ddqn-1e-0p-600000b'
     args = argparse.Namespace(**{
         'model_name':model_name,
-        'seed':1,
-        'num_batches':60000,
+        'seed':2,
+        'num_batches':600000,
         'num_rollout_steps':1
 
     })
-    storage_path = os.getcwd() + '/storage/'
-    model_dir = storage_path + args.model_name
+    storage_path = os.getcwd() + '/storage'
+    model_dir = storage_path + '/' + args.model_name
 
     logger = get_logger(model_dir)
     csv_file, csv_writer = get_csv_writer(model_dir)
@@ -48,8 +48,8 @@ if __name__ == '__main__':
     algo = DQNAlgo(envs, agent, target_model, num_rollout_steps=args.num_rollout_steps,
                    lr=0.0001,double_dpn=True,
                    target_model_update_interval=20)
-    cwd = os.getcwd()
-    with MonitorSysParams(cwd):
+
+    with MonitorSysParams(model_dir):
         algo.train_model(args.num_batches,CsvLogger(csv_file,csv_writer,logger))
     # env = build_CartPoleEnv(num_envs=1, use_multiprocessing=False)
     # visualize_it(env,model_dir)
