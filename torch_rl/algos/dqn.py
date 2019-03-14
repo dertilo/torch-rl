@@ -34,7 +34,9 @@ class DQNAlgo(object):
     def __init__(self, env:gym.Env, agent:QModel, target_model, num_rollout_steps=None, target_model_update_interval=10,
                  double_dpn=False,
                  discount=0.99, lr=7e-4,
-                 rmsprop_alpha=0.99, rmsprop_eps=1e-5):
+                 rmsprop_alpha=0.99,
+                 memory_size = 1000,
+                 rmsprop_eps=1e-5):
 
         self.double_dqn = double_dpn
         self.env = env
@@ -59,7 +61,7 @@ class DQNAlgo(object):
         initial_exp = DictList.build({'env':initial_env_step,'agent':initial_agent_step})
 
         self.batch_size = 32#self.num_rollout_steps * self.num_envs
-        self.exp_memory = ExperienceMemory(2000//self.num_envs, initial_exp, step_logging_fun)
+        self.exp_memory = ExperienceMemory(memory_size//self.num_envs, initial_exp, step_logging_fun)
 
 
         self.optimizer = torch.optim.RMSprop(self.agent.parameters(), lr,alpha=rmsprop_alpha,eps=rmsprop_eps)
@@ -148,9 +150,12 @@ class DQNAlgo(object):
                                                              'next_env_step':self.exp_memory.buffer[next_indexes].env}))
         return batch_exp
 
-    def train_model(self,num_batches,logger:CsvLogger):
+    def train_model(self,num_batches,logger:CsvLogger,initial_eps_value=1.0,final_eps_value=0.01,end_of_interpolation=None):
 
-        self.eps_schedule = LinearAndConstantSchedule(initial_value=0.1, final_value=0.1, end_of_interpolation=num_batches)
+        e_o_i = num_batches if end_of_interpolation is None else end_of_interpolation
+        self.eps_schedule = LinearAndConstantSchedule(initial_value=initial_eps_value,
+                                                      final_value=final_eps_value,
+                                                      end_of_interpolation=e_o_i)
         logger.on_train_start()
         for k in range(num_batches):
             metrics_to_log = self.train_batch()

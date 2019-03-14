@@ -369,7 +369,7 @@ def minimal_test():
     x = env.reset()
     # agent = SnakeA2CAgent(env.observation_space, env.action_space)
     agent = SnakeDQNAgent(env.observation_space, env.action_space)
-    visualize_it(env, agent,num_steps=100)
+    visualize_it(env, agent,num_steps=1000)
 
 
 if __name__ == '__main__':

@@ -60,7 +60,7 @@ def save_model(model, model_dir):
 
 
 def get_log_path(model_dir):
-    return os.path.join(model_dir, "log.txt")
+    return os.path.join(model_dir, "train-log.txt")
 
 
 def get_logger(model_dir):
@@ -84,7 +84,7 @@ def get_vocab_path(model_dir):
 
 
 def get_csv_path(model_dir):
-    return os.path.join(model_dir, "log.csv")
+    return os.path.join(model_dir, "train-log.csv")
 
 
 def get_csv_writer(model_dir):
